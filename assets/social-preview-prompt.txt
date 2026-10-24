@@ -1,8 +1,1 @@
-Create a 2:1 landscape social preview card for the public GitHub repository "Assume Compromised", ideally 1536x768 or 1280x640. Use the attached manga wall diagram as a VISUAL STYLE REFERENCE ONLY. This is a new image, not a modification of its labels. Preserve its black-and-white manga atlas aesthetic, fine ink drawing, brick concentric walls viewed obliquely from above, gate bastions, scattered small recognizable Titans as the Attack on Titan Easter egg. No gore.
-Composition: an exceptionally legible open source project social card. Large clean WHITE area on the LEFT 52%, with generous padding and dark ink text. On the RIGHT 48% a beautifully drawn, simple aerial diagram of THREE concentric fortress wall circuits and a tiny central keep with Titans outside; illustrative map detail, not a data graphic. The illustration can bleed to the right edge but no elements overlap the text. White/very light paper ground, black ink, subtle manga halftone, no color, no photo realism. No panels full of dense words.
-Exact text only:
-large bold title on two lines: "Assume" "Compromised"
-subtitle, at large readable size: "Give an attacker your server."
-second subtitle line: "Map what they can do with the money."
-small footer: "samuyoon/assume-compromised"
-No original diagram labels, no Ground customer details, no other text, no watermark. Make the title strong and highly readable at thumbnail size. Keep all important text at least 8% from image edges.
+Built-in image edit of existing social-preview.jpg. Preserve monochrome manga wall illustration, Titans, composition and 2:1 layout. Replace title with 'Security Boundary Mapping', subtitle with 'Map your system. See what survives a compromise.', and footer with 'samuyoon/security-boundary-mapping'. Only these text regions change.

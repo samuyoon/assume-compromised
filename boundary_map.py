@@ -1,17 +1,24 @@
 #!/usr/bin/env python3
-"""Read-only report tooling. No model calls, target imports, or network access."""
+"""Security Boundary Mapping: private discovery, authority analysis, and reporting.
 
+The host coding agent performs investigation and authorized read-only provider queries.
+This dependency-free CLI never executes target code or reads credential values.
+"""
 import argparse
+from datetime import datetime, timezone
 import hashlib
 import html
 import json
+import os
 from pathlib import Path
 import re
-import shlex
 import sys
-from datetime import datetime
 
-HOME = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parent
+KINDS = ['principal', 'credential', 'service', 'control', 'resource', 'action']
+SKIP = {'.git', 'node_modules', '.venv', 'venv', '__pycache__', 'dist', 'build', '.next', 'vendor', '.terraform'}
+EXTENSIONS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.go', '.rs', '.sol', '.tf', '.yaml', '.yml', '.json', '.toml', '.md', '.sh', '.dockerfile'}
+ENV = re.compile(r'''(?:process\.env\.([A-Z][A-Z0-9_]*)|(?:getenv|environ\.get)\(\s*["']([A-Z][A-Z0-9_]*)["']|(?:process\.env|os\.environ)\[\s*["']([A-Z][A-Z0-9_]*)["'])''')
 
 
 class ReportError(ValueError):
@@ -20,287 +27,384 @@ class ReportError(ValueError):
 
 def read_json(path):
     try:
-        return json.loads(Path(path).read_text(encoding="utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
-        raise ReportError(f"Cannot read JSON {path}: {exc}") from exc
+        return json.loads(Path(path).read_text(encoding='utf-8'))
+    except (OSError, ValueError) as exc:
+        raise ReportError(f'Cannot read JSON {path}: {exc}') from exc
 
 
-def schema_errors(value, rule, schema, where="$", errors=None):
-    """Validate the JSON Schema subset used by the shipped schema, fail closed."""
-    if errors is None:
-        errors = []
-    if "$ref" in rule:
-        target = schema
-        for key in rule["$ref"].removeprefix("#/").split("/"):
-            target = target[key]
-        return schema_errors(value, target, schema, where, errors)
-    types = {"object": dict, "array": list, "string": str, "integer": int}
-    expected = rule.get("type")
-    if expected and (not isinstance(value, types[expected]) or
-                     (expected == "integer" and isinstance(value, bool))):
-        errors.append(f"{where}: expected {expected}")
-        return errors
-    if "enum" in rule and value not in rule["enum"]:
-        errors.append(f"{where}: expected one of {rule['enum']}")
-    if isinstance(value, dict):
-        properties = rule.get("properties", {})
-        for key in rule.get("required", []):
-            if key not in value:
-                errors.append(f"{where}.{key}: required")
-        for key, child in value.items():
-            if key in properties:
-                schema_errors(child, properties[key], schema, f"{where}.{key}", errors)
-            elif rule.get("additionalProperties") is False:
-                errors.append(f"{where}.{key}: unknown field")
-    if isinstance(value, list):
-        if len(value) < rule.get("minItems", 0):
-            errors.append(f"{where}: requires at least {rule['minItems']} items")
-        for index, child in enumerate(value):
-            schema_errors(child, rule.get("items", {}), schema, f"{where}[{index}]", errors)
-    if isinstance(value, str):
-        if len(value.strip()) < rule.get("minLength", 0):
-            errors.append(f"{where}: requires nonempty text")
-        if "pattern" in rule and not re.search(rule["pattern"], value):
-            errors.append(f"{where}: invalid format")
-    if isinstance(value, int) and "minimum" in rule and value < rule["minimum"]:
-        errors.append(f"{where}: below minimum {rule['minimum']}")
-    return errors
+def write_json(path, data):
+    Path(path).write_text(json.dumps(data, indent=2) + '\n', encoding='utf-8')
 
 
 def safe_file(root, relative):
-    path = Path(relative)
-    if path.is_absolute() or ".." in path.parts or not relative:
-        raise ReportError(f"Evidence path must be relative without '..': {relative}")
-    resolved_root = Path(root).resolve(strict=True)
-    resolved = (resolved_root / path).resolve(strict=True)
-    if not resolved.is_relative_to(resolved_root) or not resolved.is_file():
-        raise ReportError(f"Evidence escapes its root or is not a file: {relative}")
-    return resolved
+    p = Path(relative)
+    if p.is_absolute() or '..' in p.parts or not relative:
+        raise ReportError('Evidence path must be relative without traversal')
+    root = Path(root).resolve(strict=True)
+    target = (root / p).resolve(strict=True)
+    if not target.is_relative_to(root) or not target.is_file():
+        raise ReportError('Evidence escapes its root or is not a file')
+    if target.name.startswith('.env') or any(part.startswith('.env') for part in p.parts) or target.suffix in {'.pem', '.key', '.p12', '.pfx'}:
+        raise ReportError('Credential files cannot be used as evidence')
+    return target
 
 
-def evidence_record(root, path, start, end, evidence_id, source="repository"):
-    file = safe_file(root, path)
-    data = file.read_bytes()
-    lines = data.decode("utf-8").splitlines()
+def evidence_record(root, path, start, end, evidence_id, root_id='repo1', kind='source', provenance='', captured_at=None):
+    if kind != 'source' and not captured_at:
+        raise ReportError('Deployment/attestation evidence requires its original --captured-at timestamp')
+    data = safe_file(root, path).read_bytes()
+    lines = data.decode('utf-8').splitlines()
     if not 1 <= start <= end <= len(lines):
-        raise ReportError(f"Invalid line range {start}-{end} for {path} ({len(lines)} lines)")
-    return {"id": evidence_id, "kind": "repository", "root": source, "path": path,
-            "start_line": start, "end_line": end,
-            "sha256": hashlib.sha256(data).hexdigest(), "captured_at": "", "notes": ""}
+        raise ReportError(f'Invalid line range {start}-{end} for {path}')
+    return dict(id=evidence_id, root=root_id, path=path, start_line=start, end_line=end,
+                sha256=hashlib.sha256(data).hexdigest(), kind=kind,
+                captured_at=captured_at or datetime.now(timezone.utc).isoformat(), provenance=provenance)
 
 
-def validate(report, report_path, repo):
-    schema = read_json(HOME / "report.schema.json")
-    errors = schema_errors(report, schema, schema)
-    if errors:
-        return errors
-    collections = {}
-    for name in ("steps", "boundaries", "evidence"):
-        records = report[name]
-        ids = [r["id"] for r in records]
-        if len(set(ids)) != len(ids):
-            errors.append(f"{name}: duplicate IDs")
-        collections[name] = {r["id"]: r for r in records}
-    evidence = collections["evidence"]
-    boundaries = collections["boundaries"]
-
-    def refs(ids, available, where):
-        for item in ids:
-            if item not in available:
-                errors.append(f"{where}: unknown reference {item}")
-        if len(ids) != len(set(ids)):
-            errors.append(f"{where}: duplicate references")
-
-    for item in evidence.values():
-        try:
-            root = repo if item["root"] == "repository" else Path(report_path).parent
-            checked = evidence_record(root, item["path"], item["start_line"],
-                                      item["end_line"], item["id"], item["root"])
-            if checked["sha256"] != item["sha256"]:
-                errors.append(f"{item['id']}: evidence hash does not match {item['path']}")
-        except (ReportError, OSError, UnicodeError) as exc:
-            errors.append(f"{item['id']}: {exc}")
-        if item["kind"] != "repository":
-            try:
-                stamp = datetime.fromisoformat(item["captured_at"].replace("Z", "+00:00"))
-                if stamp.tzinfo is None or not item["notes"].strip():
-                    raise ValueError("timezone and provenance notes required")
-            except ValueError:
-                errors.append(f"{item['id']}: snapshot/attestation needs ISO timestamp with timezone and provenance notes")
-    used = set()
-    for step in report["steps"]:
-        refs(step["boundary_ids"], boundaries, step["id"])
-        refs(step["evidence_ids"], evidence, step["id"])
-        used.update(step["boundary_ids"])
-    for boundary in boundaries.values():
-        bid = boundary["id"]
-        refs(boundary["evidence_ids"], evidence, bid)
-        if bid not in used:
-            errors.append(f"{bid}: not connected to an operation step")
-        for path in boundary["change_paths"]:
-            refs(path["evidence_ids"], evidence, bid + " change path")
-            if path["attacker_control"] != "unknown" and not path["evidence_ids"]:
-                errors.append(f"{bid}: known change-path control requires evidence")
-        if boundary["evidence_basis"] == "source_only" and not boundary["production_checks"]:
-            errors.append(f"{bid}: source-only assessment requires production checks")
-        if boundary["evidence_basis"] == "deployment_snapshot" and not any(
-                evidence.get(e, {}).get("kind") == "deployment_snapshot" for e in boundary["evidence_ids"]):
-            errors.append(f"{bid}: deployment basis requires referenced deployment snapshot")
-        if boundary["status"] == "survives":
-            if boundary["enforcement_location"] != "outside":
-                errors.append(f"{bid}: survives requires enforcement outside the compromise")
-            if not boundary["change_paths"] or any(p["attacker_control"] != "no" for p in boundary["change_paths"]):
-                errors.append(f"{bid}: survives requires documented change/bypass paths outside attacker control")
-            if not any(evidence.get(e, {}).get("kind") in ("repository", "deployment_snapshot")
-                       for e in boundary["evidence_ids"]):
-                errors.append(f"{bid}: survives needs evidence beyond attestation")
-        if any(p["attacker_control"] == "yes" for p in boundary["change_paths"]) and boundary["status"] != "defeated":
-            errors.append(f"{bid}: attacker-controlled change/bypass path requires defeated classification")
-        if any(p["attacker_control"] == "unknown" for p in boundary["change_paths"]) and boundary["status"] == "survives":
-            errors.append(f"{bid}: unresolved change authority cannot support survives")
-    challenged = set()
-    for challenge in report["challenges"]:
-        bid = challenge["boundary_id"]
-        refs([bid], boundaries, "challenge")
-        refs(challenge["evidence_ids"], evidence, "challenge")
-        if bid in challenged:
-            errors.append(f"{bid}: duplicate challenge")
-        challenged.add(bid)
-        if bid in boundaries:
-            unknown = boundaries[bid]["status"] == "unverified"
-            if unknown != (challenge["outcome"] == "unresolved"):
-                errors.append(f"{bid}: challenge outcome contradicts boundary classification")
-    for bid in boundaries.keys() - challenged:
-        errors.append(f"{bid}: missing challenge pass")
-    for question in report["open_questions"]:
-        if question["boundary_id"] != "scope":
-            refs([question["boundary_id"]], boundaries, "open question")
-    for bid, boundary in boundaries.items():
-        if boundary["status"] == "unverified" and not any(q["boundary_id"] == bid for q in report["open_questions"]):
-            errors.append(f"{bid}: unverified boundary needs an open question")
+def schema_errors(value, rule, schema, where='$'):
+    if '$ref' in rule:
+        return schema_errors(value, schema['$defs'][rule['$ref'].split('/')[-1]], schema, where)
+    errors = []
+    types = {'object': dict, 'array': list, 'string': str, 'integer': int}
+    if 'type' in rule and (not isinstance(value, types[rule['type']]) or isinstance(value, bool)):
+        return [f'{where}: expected {rule["type"]}']
+    if 'enum' in rule and value not in rule['enum']:
+        errors.append(f'{where}: expected one of {rule["enum"]}')
+    if isinstance(value, dict):
+        for k in rule.get('required', []):
+            if k not in value:
+                errors.append(f'{where}.{k}: required')
+        for k, v in value.items():
+            if k in rule.get('properties', {}):
+                errors += schema_errors(v, rule['properties'][k], schema, f'{where}.{k}')
+            elif rule.get('additionalProperties') is False:
+                errors.append(f'{where}.{k}: unknown field')
+    if isinstance(value, list):
+        if len(value) < rule.get('minItems', 0):
+            errors.append(f'{where}: requires at least {rule["minItems"]} items')
+        for i, v in enumerate(value):
+            errors += schema_errors(v, rule.get('items', {}), schema, f'{where}[{i}]')
+    if isinstance(value, str) and len(value.strip()) < rule.get('minLength', 0):
+        errors.append(f'{where}: empty value')
+    if isinstance(value, int) and value < rule.get('minimum', value):
+        errors.append(f'{where}: below minimum')
     return errors
 
 
-def clean(text):
-    return html.escape(text, quote=False).replace("|", "\\|").replace("\n", " ")
+def validate(report, report_path, roots):
+    errors = schema_errors(report, read_json(ROOT / 'report.schema.json'), read_json(ROOT / 'report.schema.json'))
+    if errors:
+        return errors
+    collections = {}
+    for name in ['nodes', 'edges', 'boundaries', 'scenarios', 'evidence', 'coverage', 'questions']:
+        items = report[name]
+        collections[name] = {x['id']: x for x in items}
+        if len(items) != len(collections[name]):
+            errors.append(f'{name}: duplicate IDs')
+    nodes, edges, evidence = (collections[k] for k in ['nodes', 'edges', 'evidence'])
+    global_ids = [x['id'] for name in ['nodes', 'edges', 'boundaries', 'scenarios', 'coverage', 'questions'] for x in report[name]]
+    if len(set(global_ids)) != len(global_ids):
+        errors.append('IDs must be unique across graph, scenarios, coverage and questions')
+
+    def refs(ids, pool, where):
+        if len(set(ids)) != len(ids):
+            errors.append(f'{where}: duplicate references')
+        for i in ids:
+            if i not in pool:
+                errors.append(f'{where}: unknown reference {i}')
+
+    for ev in evidence.values():
+        try:
+            if ev['root'] == 'artifacts':
+                root = Path(report_path).parent
+            else:
+                root = roots[ev['root']]
+            actual = evidence_record(root, ev['path'], ev['start_line'], ev['end_line'], ev['id'])
+            if actual['sha256'] != ev['sha256']:
+                errors.append(f'{ev["id"]}: evidence hash does not match')
+            stamp = datetime.fromisoformat(ev['captured_at'].replace('Z', '+00:00'))
+            if stamp.tzinfo is None:
+                raise ValueError('capture time needs timezone')
+            if ev['kind'] != 'source' and not ev['provenance'].strip():
+                errors.append(f'{ev["id"]}: observation needs account/environment and provenance')
+        except (KeyError, OSError, ValueError, UnicodeError) as exc:
+            errors.append(f'{ev["id"]}: {exc}')
+    envs = report['system']['environments']
+    for n in nodes.values():
+        refs(n['owner_ids'], nodes, n['id'] + ' owners')
+        refs(n['evidence_ids'], evidence, n['id'])
+        if n['environment'] not in envs and n['environment'] != 'shared':
+            errors.append(f'{n["id"]}: unknown environment')
+    for edge in edges.values():
+        refs([edge['source'], edge['target']], nodes, edge['id'])
+        refs(edge['requires_all'], nodes, edge['id'] + ' prerequisites')
+        refs(edge['evidence_ids'], evidence, edge['id'])
+        if edge['basis'] != 'unknown' and not edge['evidence_ids']:
+            errors.append(f'{edge["id"]}: established grant needs evidence')
+        if edge['basis'] == 'observed' and not any(evidence.get(e, {}).get('kind') == 'deployment' for e in edge['evidence_ids']):
+            errors.append(f'{edge["id"]}: observed grant needs deployment evidence')
+    for c in report['coverage']:
+        refs(c['evidence_ids'], evidence, c['id'])
+        if c['environment'] not in envs and c['environment'] != 'shared':
+            errors.append(f'{c["id"]}: unknown environment')
+        if c['status'] == 'inspected' and not c['evidence_ids']:
+            errors.append(f'{c["id"]}: inspected coverage needs evidence')
+    for s in report['scenarios']:
+        refs(s['initial_control'], nodes, s['id'])
+    for b in report['boundaries']:
+        refs([b['action_id'], b['enforcer_id']], nodes, b['id'])
+        refs(b['gate_ids'], edges, b['id'])
+        refs(b['coverage_ids'], collections['coverage'], b['id'])
+        refs(b['evidence_ids'], evidence, b['id'])
+        if nodes.get(b['action_id'], {}).get('kind') != 'action':
+            errors.append(f'{b["id"]}: protected target must be an action')
+        incoming = {e['id'] for e in edges.values() if e['target'] == b['action_id']}
+        if set(b['gate_ids']) != incoming or not incoming:
+            errors.append(f'{b["id"]}: gates must enumerate every modeled incoming action path')
+        if not any(evidence.get(e, {}).get('kind') == 'deployment' for e in b['evidence_ids']) and not b['remaining_checks']:
+            errors.append(f'{b["id"]}: source-only boundary needs remaining deployment checks')
+    for q in report['questions']:
+        refs(q['affects'], {**nodes, **collections['boundaries'], **collections['coverage'], **collections['scenarios']}, q['id'])
+        refs(q['evidence_ids'], evidence, q['id'])
+        if q['status'] == 'resolved' and (not q['answer'].strip() or not q['evidence_ids']):
+            errors.append(f'{q["id"]}: resolution needs an answer and corroborating evidence')
+    # Environment discovery itself must be explicitly accounted for.
+    for action in nodes.values():
+        if action['kind'] == 'action' and not any(b['action_id'] == action['id'] for b in report['boundaries']):
+            errors.append(f'{action["id"]}: action needs a boundary assessment')
+    for env in envs:
+        missing = {'system_inventory', 'source', 'deployment', 'credentials', 'administration', 'recovery', 'external_provider'} - {c['category'] for c in report['coverage'] if c['environment'] == env}
+        if missing:
+            errors.append(f'{env}: missing coverage categories: ' + ', '.join(sorted(missing)))
+        if not any(c['environment'] == env and c['category'] == 'system_inventory' for c in report['coverage']):
+            errors.append(f'{env}: missing system_inventory coverage')
+    return errors
+
+
+def reachable(report, scenario, possible=False):
+    reached = set(scenario['initial_control'])
+    paths = {n: 'Assumed initial compromise' for n in reached}
+    changed = True
+    while changed:
+        changed = False
+        for e in report['edges']:
+            if e['basis'] != 'observed' and not possible:
+                continue
+            if e['source'] in reached and set(e['requires_all']) <= reached and e['target'] not in reached:
+                reached.add(e['target']); paths[e['target']] = e['id']; changed = True
+    return reached, paths
+
+
+def assess(report, scenario):
+    known, paths = reachable(report, scenario)
+    possible, _ = reachable(report, scenario, True)
+    coverage = {c['id']: c for c in report['coverage']}
+    evidence = {e['id']: e for e in report['evidence']}
+    nodes = {n['id']: n for n in report['nodes']}
+    edges = {e['id']: e for e in report['edges']}
+    results = []
+    for b in report['boundaries']:
+        action = b['action_id']
+        relevant = {action, b['enforcer_id']}
+        changed = True
+        while changed:
+            before = len(relevant)
+            for e in report['edges']:
+                if e['target'] in relevant:
+                    relevant.update([e['source'], *e['requires_all']])
+            for nid in list(relevant):
+                relevant.update(nodes[nid]['owner_ids'])
+            changed = len(relevant) != before
+        scope_coverage = set(b['coverage_ids']) | {c['id'] for c in report['coverage']
+                          if c['category'] == 'system_inventory' and c['environment'] in
+                          {nodes[action]['environment'], 'shared'}}
+        affected = relevant | scope_coverage | {b['id'], scenario['id']}
+        unknowns = [q['id'] for q in report['questions'] if q['status'] != 'resolved' and set(q['affects']) & affected]
+        incomplete = [c for c in sorted(scope_coverage) if coverage[c]['status'] != 'inspected']
+        owner_gaps = [nid for nid in sorted(relevant) if nodes[nid]['kind'] in {'credential', 'control'} and not nodes[nid]['owner_ids']]
+        issues = []
+        if action in known:
+            status = 'defeated'
+            issues = ['A modeled authority path reaches this action. Follow the graph edges for the prerequisites.']
+        else:
+            if action in possible:
+                issues.append('An unresolved authority grant could reach this action.')
+            if b['enforcer_id'] in possible:
+                issues.append('The enforcer itself may be controlled; enumerate the resulting bypass.')
+            if unknowns:
+                issues.append('Unresolved clarifications: ' + ', '.join(unknowns))
+            if incomplete:
+                issues.append('Incomplete coverage: ' + ', '.join(incomplete))
+            if owner_gaps:
+                issues.append('Unresolved credential/control owners: ' + ', '.join(owner_gaps))
+            if b['challenge'] != 'supported' or b['remaining_checks']:
+                issues.append('Challenge or deployment checks remain incomplete.')
+            if not any(evidence.get(e, {}).get('kind') == 'deployment' for e in b['evidence_ids']):
+                issues.append('Enforcement has source evidence only.')
+            if any(edges[g]['basis'] != 'observed' for g in b['gate_ids']):
+                issues.append('Action paths are not all deployment-observed.')
+            if scenario['review'] != 'supported':
+                issues.append('Initial compromise assumptions need review.')
+            status = 'unverified' if issues else 'survives'
+            if status == 'survives':
+                issues = ['The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage.']
+        results.append(dict(boundary_id=b['id'], action_id=action, status=status, reasons=issues))
+    return dict(id=scenario['id'], known=sorted(known), possible=sorted(possible), paths=paths, results=results)
+
+
+def discover(roots, max_files=20000):
+    records, limitations = [], []
+    for rid, root in roots.items():
+        count = 0
+        for base, dirs, files in os.walk(root, followlinks=False):
+            dirs[:] = sorted(d for d in dirs if d not in SKIP and not (Path(base) / d).is_symlink())
+            for name in sorted(files):
+                p = Path(base) / name
+                if p.is_symlink() or name.startswith('.env') or p.suffix in {'.pem', '.key', '.p12', '.pfx'}:
+                    continue
+                if p.suffix.lower() not in EXTENSIONS and name not in {'Dockerfile', 'Procfile', 'Makefile'}:
+                    continue
+                count += 1
+                if count > max_files:
+                    break
+                relative = str(p.relative_to(root))
+                categories = []
+                if any(t in relative.lower() for t in ['terraform', '.github/workflows', 'docker', 'render', 'vercel', 'kubernetes', 'deploy', 'infra']):
+                    categories.append('deployment')
+                if any(t in relative.lower() for t in ['auth', 'permission', 'policy', 'sign', 'wallet', 'role', 'recover', 'admin']):
+                    categories.append('authority')
+                symbols = []
+                try:
+                    if p.stat().st_size <= 512000:
+                        text = p.read_text(encoding='utf-8')
+                        symbols = sorted({next(x for x in m if x) for m in ENV.findall(text)})
+                    else:
+                        limitations.append(f'{rid}/{relative}: content skipped above 512 KB')
+                except (OSError, UnicodeError):
+                    limitations.append(f'{rid}/{relative}: could not read text')
+                records.append(dict(root=rid, path=relative, categories=categories, credential_name_candidates=symbols))
+            if count > max_files:
+                limitations.append(f'{rid}: file limit reached; inventory is incomplete')
+                break
+    return dict(files=records, limitations=limitations,
+                warning='Candidates only. No deployments, credential values, permissions, or completeness have been established.')
+
+
+def escape(s):
+    return html.escape(str(s), quote=True)
 
 
 def render(report):
-    s = report["scope"]
-    lines = ["# Security boundary map", "", "> Artifact validation does not establish system security. "
-             "Source-only conclusions are conditional on deployment matching the inspected material.", "",
-             f"**Operation:** {clean(s['operation'])}", "",
-             f"**Assumed compromise:** {clean(s['compromised_component'])}", ""]
-    for name, label in [("attacker_capabilities", "Attacker capabilities"),
-                        ("excluded_capabilities", "Excluded capabilities / assumptions"),
-                        ("evidence_limits", "Evidence limits")]:
-        lines.extend([f"## {label}", ""] + ["- " + clean(x) for x in s[name]] + [""])
-    lines += ["## Money movement", ""]
-    for i, step in enumerate(report["steps"], 1):
-        lines += [f"### {i}. {clean(step['action'])} ({clean(step['id'])})", "",
-                  f"- Actor: {clean(step['actor'])}", f"- Authority: {clean(step['authority'])}",
-                  f"- Credential references: {clean(', '.join(step['credential_refs'])) or 'None identified'}",
-                  f"- Inputs: {clean(step['inputs'])}", f"- Outputs: {clean(step['outputs'])}",
-                  f"- Boundaries: {clean(', '.join(step['boundary_ids'])) or 'None identified'}",
-                  f"- Evidence: {clean(', '.join(step['evidence_ids']))}", ""]
-    lines += ["## Boundary inventory", "", "| Boundary | Restriction | Enforcement | Status | Basis |",
-              "| --- | --- | --- | --- | --- |"]
-    for b in report["boundaries"]:
-        lines.append("| " + " | ".join(clean(x) for x in [b["id"], b["restriction"],
-                     b["enforced_by"] + " (" + b["enforcement_location"] + ")", b["status"], b["evidence_basis"]]) + " |")
-    lines.append("")
-    for b in report["boundaries"]:
-        lines += [f"### {clean(b['id'])}: {clean(b['restriction'])}", "", clean(b["reason"]), "",
-                  "Change and bypass authority:", ""]
-        for p in b["change_paths"]:
-            lines.append(f"- {clean(p['principal'])}: {clean(p['mechanism'])}. "
-                         f"Attacker control: **{p['attacker_control']}**. Evidence: {clean(', '.join(p['evidence_ids'])) or 'Unresolved'}.")
-        lines += ["", "Production checks:", ""] + ["- " + clean(x) for x in b["production_checks"]]
-        lines += ["", "Evidence: " + clean(", ".join(b["evidence_ids"])), ""]
-    lines += ["## Challenge pass", ""]
-    for c in report["challenges"]:
-        lines.append(f"- **{clean(c['boundary_id'])} / {c['outcome']}**: {clean(c['check'])} "
-                     f"{clean(c['result'])} Evidence: {clean(', '.join(c['evidence_ids'])) or 'Unresolved'}.")
-    lines += ["", "## Open questions", ""]
-    for q in report["open_questions"]:
-        lines.append(f"- **{clean(q['boundary_id'])}**: {clean(q['question'])} "
-                     f"Needed: {clean(q['needed_evidence'])}")
-    lines += ["", "## Limitations", ""] + ["- " + clean(x) for x in report["limitations"]]
-    lines += ["", "## Evidence", ""]
-    for e in report["evidence"]:
-        lines += [f"- **{clean(e['id'])}** ({e['kind']}): {e['root']}/{clean(e['path'])}, "
-                  f"lines {e['start_line']}-{e['end_line']}. SHA-256: {e['sha256']}.",
-                  f"  Captured: {clean(e['captured_at']) or 'Repository file; no deployment observation'}. {clean(e['notes'])}"]
-    return "\n".join(lines) + "\n"
+    assessments = [assess(report, s) for s in report['scenarios']]
+    nodes = {n['id']: n for n in report['nodes']}
+    out = ['# Security Boundary Mapping', '', report['system']['name'], '',
+           'Snapshot-based investigation, not a security certification. Unreachable in the graph does not prove impossible in the system.', '',
+           '| Compromise | Action | Outcome | Why |', '| --- | --- | --- | --- |']
+    for s, a in zip(report['scenarios'], assessments):
+        for r in a['results']:
+            vals = [s['label'], nodes[r['action_id']]['label'], r['status'], ' '.join(r['reasons'])]
+            out.append('| ' + ' | '.join(escape(v).replace('|', '\\|') for v in vals) + ' |')
+    for title, key in [('System coverage', 'coverage'), ('Clarifications', 'questions'), ('Authority inventory', 'nodes'), ('Evidence', 'evidence')]:
+        out += ['', '## ' + title, '', '```json', json.dumps(report[key], indent=2), '```']
+    return '\n'.join(out) + '\n'
 
 
-def initialize(args):
-    repo = Path(args.repo).resolve(strict=True)
-    if not repo.is_dir():
-        raise ReportError("--repo must be a directory")
+def render_html(report):
+    data = json.dumps(dict(report=report, assessments=[assess(report, s) for s in report['scenarios']])).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    template = (ROOT / 'viewer.html').read_text(encoding='utf-8')
+    return template.replace('/*REPORT_DATA*/null', data)
+
+
+def roots_from_args(values):
+    roots = {}
+    for i, value in enumerate(values or [], 1):
+        rid, path = value.split('=', 1) if '=' in value else (f'repo{i}', value)
+        if rid in roots or rid == 'artifacts' or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]*', rid):
+            raise ReportError('Repository IDs must be unique identifiers; artifacts is reserved')
+        root = Path(path).resolve(strict=True)
+        if not root.is_dir():
+            raise ReportError('Repository root must be a directory')
+        roots[rid] = root
+    return roots
+
+
+def initialize(args, roots):
     out = Path(args.out).resolve()
-    scope = read_json(HOME / "scope.example.json")
-    scope.update(operation=args.operation, compromised_component=args.compromised)
-    # Never overwrite a previous review, including its supplied evidence.
+    if any(out == r or out.is_relative_to(r) for r in roots.values()):
+        raise ReportError('Keep private review output outside the source repositories')
     out.mkdir(parents=True, exist_ok=False)
-    (out / "scope.json").write_text(json.dumps(scope, indent=2) + "\n", encoding="utf-8")
-    report = {"report_version": "1", "scope": scope, "steps": [], "boundaries": [],
-              "evidence": [], "challenges": [], "open_questions": [], "limitations": []}
-    (out / "report.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
-    header = ("# Run a boundary review\n\nRepository: " + str(repo) + "\n\n"
-              "Output folder: " + str(out) + "\n\n"
-              "Read scope.json here. Write report.json here. Read the format and schema at " + str(HOME) + ". "
-              "This template is intentionally incomplete and must fail validation until investigated.\n\n")
-    (out / "RUN.md").write_text(header + (HOME / "prompts/map.md").read_text(encoding="utf-8"), encoding="utf-8")
-    (out / "CHALLENGE.md").write_text((HOME / "prompts/challenge.md").read_text(encoding="utf-8"), encoding="utf-8")
-    print(f"Review initialized: {out}\nGive RUN.md to your coding agent. No investigation has run.")
-    print(shlex.join([sys.executable, str(HOME / "boundary_map.py"), "validate", str(out / "report.json"), "--repo", str(repo)]))
+    report = dict(report_version='2', system=dict(name=args.name, environments=args.environment or ['production'], exclusions=[]),
+                  nodes=[], edges=[], boundaries=[], scenarios=[], coverage=[], evidence=[], questions=[])
+    write_json(out / 'report.json', report)
+    write_json(out / 'discovery.json', discover(roots))
+    write_json(out / 'workspace.json', {'repositories': {k: str(v) for k, v in roots.items()}})
+    instructions = '# Map the entire application\n\nTool directory: ' + str(ROOT) + '\nReview directory: ' + str(out) + '\n\n'
+    instructions += 'Read workspace.json, discovery.json, report.json, the schema and REPORT_FORMAT.md.\n\n'
+    instructions += '\n\n'.join((ROOT / 'prompts' / name).read_text() for name in ['discover.md', 'providers.md', 'map.md', 'challenge.md'])
+    (out / 'RUN.md').write_text(instructions, encoding='utf-8')
+    print(f'Initialized {out}. Repository candidates discovered. No deployment inspection or model investigation has run.\nGive RUN.md to your coding agent.')
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description=__doc__)
-    commands = parser.add_subparsers(dest="command", required=True)
-    init = commands.add_parser("init", help="Create a private investigation workspace")
-    for name in ("repo", "operation", "compromised", "out"):
-        init.add_argument("--" + name, required=True)
-    for name in ("validate", "render"):
-        sub = commands.add_parser(name)
-        sub.add_argument("report")
-        sub.add_argument("--repo", required=True)
-        if name == "render":
-            sub.add_argument("--out", required=True)
-    ev = commands.add_parser("evidence", help="Hash a selected file and check its line range")
-    for name in ("root", "path", "id"):
-        ev.add_argument("--" + name, required=True)
-    for name in ("start", "end"):
-        ev.add_argument("--" + name, required=True, type=int)
-    ev.add_argument("--source", choices=["repository", "artifacts"], default="repository")
-    args = parser.parse_args(argv)
+    p = argparse.ArgumentParser(description=__doc__)
+    sub = p.add_subparsers(dest='command', required=True)
+    init = sub.add_parser('init')
+    init.add_argument('--repo', action='append', required=True, help='Repeat for multiple repositories; optional ID=/path')
+    init.add_argument('--out', required=True); init.add_argument('--name', required=True)
+    init.add_argument('--environment', action='append')
+    scan = sub.add_parser('discover'); scan.add_argument('--repo', action='append', required=True)
+    scan.add_argument('--out', required=True)
+    for name in ['validate', 'render', 'questions', 'answer']:
+        q = sub.add_parser(name); q.add_argument('report')
+        q.add_argument('--repo', action='append')
+        if name == 'render':
+            q.add_argument('--out', required=True); q.add_argument('--format', choices=['html', 'md'], default='html')
+        if name == 'answer':
+            q.add_argument('--id', required=True); q.add_argument('--text', required=True)
+    ev = sub.add_parser('evidence')
+    for key in ['root', 'path', 'id']:
+        ev.add_argument('--' + key, required=True)
+    ev.add_argument('--root-id', default='repo1')
+    ev.add_argument('--start', type=int, required=True); ev.add_argument('--end', type=int, required=True)
+    ev.add_argument('--kind', choices=['source', 'deployment', 'attestation'], default='source')
+    ev.add_argument('--provenance', default=''); ev.add_argument('--captured-at')
+    args = p.parse_args(argv)
     try:
-        if args.command == "init":
-            initialize(args)
-        elif args.command == "evidence":
-            print(json.dumps(evidence_record(args.root, args.path, args.start, args.end, args.id, args.source), indent=2))
-        else:
-            report = read_json(args.report)
-            errors = validate(report, args.report, args.repo)
-            if errors:
-                print("Report contract/evidence errors:\n" + "\n".join("- " + e for e in errors), file=sys.stderr)
-                return 1
-            if args.command == "render":
-                output = Path(args.out).resolve()
-                if output == Path(args.report).resolve():
-                    raise ReportError("Refusing to overwrite the JSON report with Markdown")
-                with output.open("x", encoding="utf-8") as file:
-                    file.write(render(report))
-                print(f"Rendered: {output}")
-            else:
-                print("Report structure and evidence checks complete. This is not a system-security verdict.")
+        if args.command == 'evidence':
+            print(json.dumps(evidence_record(args.root, args.path, args.start, args.end, args.id, args.root_id, args.kind, args.provenance, args.captured_at), indent=2)); return 0
+        roots = roots_from_args(args.repo)
+        if args.command == 'init':
+            initialize(args, roots); return 0
+        if args.command == 'discover':
+            with Path(args.out).open('x', encoding='utf-8') as f:
+                json.dump(discover(roots), f, indent=2)
+            return 0
+        report = read_json(args.report)
+        if not roots:
+            workspace = read_json(Path(args.report).parent / 'workspace.json')
+            roots = {k: Path(v).resolve(strict=True) for k, v in workspace['repositories'].items()}
+        if args.command in {'questions', 'answer'}:
+            for question in report['questions']:
+                if args.command == 'answer' and question['id'] == args.id:
+                    question.update(answer=args.text, status='answered')
+                    write_json(args.report, report)
+                    print('Answer recorded as an operator statement. Agent reconciliation and evidence are still required.'); return 0
+                if args.command == 'questions' and question['status'] != 'resolved':
+                    print(f'{question["id"]} [{question["status"]}]: {question["question"]}\n  Needed: {question["needed_evidence"]}\n  Answer: {question["answer"]}')
+            if args.command == 'answer':
+                raise ReportError('Unknown question ID')
+            return 0
+        errors = validate(report, args.report, roots)
+        if errors:
+            print('\n'.join(errors), file=sys.stderr); return 1
+        if args.command == 'render':
+            with Path(args.out).open('x', encoding='utf-8') as f:
+                f.write(render_html(report) if args.format == 'html' else render(report))
+        print('Report evidence and structure checked. Conclusions remain limited to the reviewed model and snapshot.')
         return 0
-    except (ReportError, OSError, UnicodeError) as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        return 2
+    except (OSError, ValueError, KeyError, UnicodeError) as exc:
+        print(f'Error: {exc}', file=sys.stderr); return 2
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     sys.exit(main())

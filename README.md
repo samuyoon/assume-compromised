@@ -1,5 +1,7 @@
 # Assume Compromised
 
+![Assume Compromised: give an attacker your server and map what they can do with the money.](assets/social-preview.jpg)
+
 **Give an attacker your server. Trace what they can do with the money.**
 
 A small, model-independent investigation kit for mapping security boundaries in software that moves money. Use it with a coding agent that can inspect your repository. It produces a money-movement map, an inventory of authority, and a list of restrictions that survive the stated compromise, fail under it, or remain unverified.

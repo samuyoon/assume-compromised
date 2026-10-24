@@ -9,142 +9,189 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 import boundary_map as bm
+EXAMPLE = ROOT / 'examples/fictional-payments'
+REPORT = EXAMPLE / 'report.json'
 
-EXAMPLE = ROOT / "examples/fictional-payments"
-REPORT = EXAMPLE / "report.json"
 
-
-class ReportTests(unittest.TestCase):
+class GraphTests(unittest.TestCase):
     def setUp(self):
         self.report = bm.read_json(REPORT)
 
     def errors(self):
-        return bm.validate(self.report, REPORT, EXAMPLE)
+        return bm.validate(self.report, REPORT, {'repo1': EXAMPLE})
 
-    def test_complete_example_and_rendered_output(self):
+    def result(self, scenario='S_runtime', boundary='B_payout'):
+        s = next(s for s in self.report['scenarios'] if s['id'] == scenario)
+        return next(x for x in bm.assess(self.report, s)['results'] if x['boundary_id'] == boundary)
+
+    def test_example_valid_and_outputs_current(self):
         self.assertEqual([], self.errors())
-        self.assertEqual((EXAMPLE / "REPORT.md").read_text(), bm.render(self.report))
+        self.assertEqual((EXAMPLE / 'REPORT.md').read_text(), bm.render(self.report))
+        self.assertEqual((EXAMPLE / 'map.html').read_text(), bm.render_html(self.report))
 
-    def test_hash_detects_changed_evidence(self):
-        self.report["evidence"][0]["sha256"] = "0" * 64
-        self.assertTrue(any("hash does not match" in e for e in self.errors()))
+    def test_runtime_has_three_distinct_outcomes(self):
+        self.assertEqual('survives', self.result()['status'])
+        self.assertEqual('defeated', self.result(boundary='B_dest')['status'])
+        self.assertEqual('unverified', self.result(boundary='B_refund')['status'])
 
-    def test_rejects_invalid_line_ranges(self):
-        self.report["evidence"][0]["end_line"] = 10000
-        self.assertTrue(any("Invalid line range" in e for e in self.errors()))
+    def test_deployment_indirectly_exposes_runtime_admin(self):
+        self.assertEqual('defeated', self.result('S_employee', 'B_dest')['status'])
+        s = next(s for s in self.report['scenarios'] if s['id'] == 'S_employee')
+        known, paths = bm.reachable(self.report, s)
+        self.assertIn('admin', known)
+        self.assertEqual('api_admin', paths['admin'])
 
-    def test_rejects_path_traversal_and_absolute_paths(self):
-        for path in ("../README.md", str(ROOT / "README.md")):
-            with self.subTest(path=path):
-                self.report["evidence"][0]["path"] = path
-                self.assertTrue(any("must be relative" in e for e in self.errors()))
+    def test_and_approval_does_not_become_or(self):
+        s = next(s for s in self.report['scenarios'] if s['id'] == 'S_runtime')
+        self.assertNotIn('payout', bm.reachable(self.report, s)[0])
+        s['initial_control'].append('customer_key')
+        self.assertEqual('defeated', self.result()['status'])
 
-    def test_rejects_symlink_escape(self):
+    def test_recovery_or_upgrade_bypass_defeats_signature(self):
+        self.assertEqual('defeated', self.result('S_admin')['status'])
+
+    def test_unknown_key_access_prevents_survives(self):
+        self.report['edges'].append(dict(id='maybe_key', source='api', target='customer_key', requires_all=[], description='Unknown recovery path', basis='unknown', relation='recover', evidence_ids=[]))
+        self.assertEqual('unverified', self.result()['status'])
+
+    def test_source_is_possible_not_deployment_observed(self):
+        self.report['edges'].append(dict(id='source_key', source='api', target='customer_key', requires_all=[], description='Source-only grant', basis='source', relation='recover', evidence_ids=['Esource']))
+        self.assertEqual('unverified', self.result()['status'])
+
+    def test_cycles_terminate_without_inventing_authority(self):
+        self.report['edges'].append(dict(id='cycle', source='ops', target='api', requires_all=[], description='Cycle', basis='observed', relation='other', evidence_ids=['Elive']))
+        self.assertEqual('survives', self.result()['status'])
+
+    def test_unknown_owner_affects_dependent_boundary(self):
+        n = next(n for n in self.report['nodes'] if n['id'] == 'customer_key')
+        n['owner_ids'] = []
+        self.assertEqual('unverified', self.result()['status'])
+        self.assertEqual('defeated', self.result(boundary='B_dest')['status'])
+
+    def test_answer_alone_does_not_resolve_question(self):
+        self.report['questions'].append(dict(id='Q_key', question='Who recovers customer key?', affects=['customer_key'], needed_evidence='Recovery policy', answer='Customer', status='answered', evidence_ids=[]))
+        self.assertEqual('unverified', self.result()['status'])
+        self.report['questions'][-1]['status'] = 'resolved'
+        self.assertTrue(any('corroborating' in e for e in self.errors()))
+
+    def test_incomplete_system_inventory_blocks_survival(self):
+        self.report['coverage'][0]['status'] = 'partial'
+        self.assertEqual('unverified', self.result()['status'])
+
+    def test_each_action_and_alternative_gate_must_be_accounted_for(self):
+        self.report['boundaries'][0]['gate_ids'].pop()
+        self.assertTrue(any('every modeled incoming' in e for e in self.errors()))
+        self.report['boundaries'].pop()
+        self.assertTrue(any('action needs a boundary' in e for e in self.errors()))
+
+    def test_observed_grants_need_live_evidence(self):
+        self.report['edges'][0]['evidence_ids'] = ['Esource']
+        self.assertTrue(any('deployment evidence' in e for e in self.errors()))
+        self.report['evidence'][-1]['kind'] = 'attestation'
+        self.assertTrue(any('deployment evidence' in e for e in self.errors()))
+
+    def test_hash_line_range_and_provenance_checks(self):
+        self.report['evidence'][0]['sha256'] = '0' * 64
+        self.report['evidence'][1]['end_line'] = 99999
+        self.assertTrue(any('hash does not match' in e for e in self.errors()))
+        self.assertTrue(any('Invalid line range' in e for e in self.errors()))
+        self.report = bm.read_json(REPORT)
+        self.report['evidence'][1]['provenance'] = ''
+        self.assertTrue(any('provenance' in e for e in self.errors()))
+
+    def test_missing_coverage_categories_are_visible(self):
+        self.report['coverage'] = [c for c in self.report['coverage'] if c['category'] != 'recovery']
+        self.assertTrue(any('missing coverage categories' in e for e in self.errors()))
+
+    def test_duplicate_ids_references_and_schema(self):
+        self.report['nodes'][0]['id'] = self.report['scenarios'][0]['id']
+        self.report['edges'][0]['target'] = 'unknown'
+        errors = self.errors()
+        self.assertTrue(any('unique across' in e for e in errors))
+        self.assertTrue(any('unknown reference' in e for e in errors))
+        del self.report['system']['environments']
+        self.assertTrue(any('required' in e for e in self.errors()))
+
+    def test_html_cannot_execute_report_text(self):
+        self.report['system']['name'] = '</script><script>alert(1)</script>'
+        output = bm.render_html(self.report)
+        self.assertNotIn(self.report['system']['name'], output)
+        self.assertIn('\\u003c/script', output)
+        self.assertNotIn('https://', output)
+
+    def test_untrusted_file_paths_and_secret_files(self):
         with tempfile.TemporaryDirectory() as folder:
-            root = Path(folder) / "repo"
-            root.mkdir()
-            outside = Path(folder) / "outside.txt"
-            outside.write_text("secret\n")
-            (root / "escape.txt").symlink_to(outside)
-            with self.assertRaisesRegex(bm.ReportError, "escapes"):
-                bm.evidence_record(root, "escape.txt", 1, 1, "E1")
+            base = Path(folder); repo = base / 'repo'; repo.mkdir()
+            outside = base / 'outside'; outside.write_text('secret')
+            (repo / 'escape').symlink_to(outside)
+            (repo / '.env').write_text('SECRET=abc')
+            (repo / 'alias').symlink_to(repo / '.env')
+            for name in ['../outside', str(outside), 'escape', '.env', 'alias']:
+                with self.subTest(name=name), self.assertRaises(bm.ReportError):
+                    bm.evidence_record(repo, name, 1, 1, 'E')
 
-    def test_missing_and_duplicate_references(self):
-        self.report["steps"][0]["boundary_ids"] = ["NO_SUCH_BOUNDARY"]
-        self.report["evidence"].append(copy.deepcopy(self.report["evidence"][0]))
-        errors = self.errors()
-        self.assertTrue(any("unknown reference" in e for e in errors))
-        self.assertTrue(any("duplicate IDs" in e for e in errors))
-
-    def test_external_policy_with_attacker_admin_cannot_survive(self):
-        self.report["boundaries"][0]["status"] = "survives"
-        self.assertTrue(any("attacker-controlled" in e for e in self.errors()))
-
-    def test_unknown_change_authority_cannot_survive(self):
-        self.report["boundaries"][1]["change_paths"][0]["attacker_control"] = "unknown"
-        self.assertTrue(any("unresolved change authority" in e for e in self.errors()))
-
-    def test_deployment_conclusion_needs_snapshot(self):
-        self.report["boundaries"][1]["evidence_basis"] = "deployment_snapshot"
-        self.assertTrue(any("requires referenced deployment snapshot" in e for e in self.errors()))
-
-    def test_snapshot_needs_timestamp_and_provenance(self):
-        self.report["evidence"][0]["kind"] = "deployment_snapshot"
-        self.report["evidence"][0]["captured_at"] = "2026-10-23T12:00:00"
-        self.assertTrue(any("timestamp with timezone" in e for e in self.errors()))
-
-    def test_source_only_conclusion_needs_production_checks(self):
-        self.report["boundaries"][1]["production_checks"] = []
-        self.assertTrue(any("requires production checks" in e for e in self.errors()))
-
-    def test_each_boundary_requires_challenge(self):
-        self.report["challenges"] = self.report["challenges"][:-1]
-        self.assertTrue(any("missing challenge pass" in e for e in self.errors()))
-
-    def test_unverified_needs_open_question(self):
-        self.report["open_questions"] = []
-        self.assertTrue(any("needs an open question" in e for e in self.errors()))
-
-    def test_schema_rejects_missing_fields_and_wrong_types(self):
-        del self.report["scope"]["operation"]
-        self.report["evidence"][0]["start_line"] = True
-        self.report["unexpected"] = "ignored?"
-        errors = self.errors()
-        self.assertTrue(any("operation: required" in e for e in errors))
-        self.assertTrue(any("expected integer" in e for e in errors))
-        self.assertTrue(any("unknown field" in e for e in errors))
-
-    def test_render_escapes_html_and_table_delimiters(self):
-        self.report["boundaries"][0]["restriction"] = "<script>alert(1)</script>|fake"
-        rendered = bm.render(self.report)
-        self.assertNotIn("<script>", rendered)
-        self.assertIn("&lt;script&gt;", rendered)
-        self.assertIn("\\|fake", rendered)
+    def test_discovery_multiple_repos_skips_secret_values_and_symlinks(self):
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder); a = base / 'a'; b = base / 'b'; a.mkdir(); b.mkdir()
+            (a / 'app.ts').write_text('const k = process.env.SIGNING_KEY;')
+            (a / '.env.production').write_text('SIGNING_KEY=DO_NOT_READ')
+            (b / 'deploy.py').write_text('import os\nx=os.environ["CLOUD_ROLE"]')
+            (a / 'alias.ts').symlink_to(a / '.env.production')
+            result = bm.discover({'api': a, 'worker': b})
+            self.assertEqual(2, len(result['files']))
+            self.assertEqual(['SIGNING_KEY'], result['files'][0]['credential_name_candidates'])
+            self.assertNotIn('DO_NOT_READ', json.dumps(result))
+            limited = bm.discover({'api': a}, max_files=0)
+            self.assertIn('incomplete', limited['limitations'][0])
 
 
 class CLITests(unittest.TestCase):
     def run_cli(self, *args):
-        return subprocess.run([sys.executable, str(ROOT / "boundary_map.py"), *map(str, args)],
-                              text=True, capture_output=True, timeout=10)
+        return subprocess.run([sys.executable, str(ROOT / 'boundary_map.py'), *map(str,args)], text=True,capture_output=True,timeout=10)
 
-    def test_init_creates_incomplete_review_without_overwriting(self):
-        with tempfile.TemporaryDirectory(prefix="boundary map ") as folder:
-            out = Path(folder) / "private review"
-            args = ["init", "--repo", EXAMPLE, "--operation", "withdrawal", "--compromised", "API", "--out", out]
+    def test_init_discovers_system_without_route_and_preserves_output(self):
+        with tempfile.TemporaryDirectory() as folder:
+            out = Path(folder) / 'private'
+            args = ['init','--repo',f'api={EXAMPLE}','--name','Test system','--out',out]
             result = self.run_cli(*args)
-            self.assertEqual(0, result.returncode, result.stderr)
-            self.assertEqual("withdrawal", bm.read_json(out / "scope.json")["operation"])
-            self.assertIn("No investigation has run", result.stdout)
-            self.assertTrue((out / "RUN.md").exists())
-            self.assertTrue((out / "CHALLENGE.md").exists())
-            invalid = self.run_cli("validate", out / "report.json", "--repo", EXAMPLE)
-            self.assertEqual(1, invalid.returncode)
-            original = (out / "scope.json").read_bytes()
-            self.assertEqual(2, self.run_cli(*args).returncode)
-            self.assertEqual(original, (out / "scope.json").read_bytes())
+            self.assertEqual(0,result.returncode,result.stderr)
+            self.assertIn('No deployment inspection',result.stdout)
+            self.assertNotIn('operation',bm.read_json(out/'report.json')['system'])
+            instructions = (out/'RUN.md').read_text()
+            self.assertIn('user-question tool',instructions)
+            self.assertIn('Inspect actual deployments',instructions)
+            self.assertTrue(bm.read_json(out/'discovery.json')['files'])
+            self.assertEqual(1,self.run_cli('validate',out/'report.json').returncode)
+            self.assertEqual(2,self.run_cli(*args).returncode)
 
-    def test_evidence_validate_render_end_to_end(self):
-        record = self.run_cli("evidence", "--root", EXAMPLE, "--path", "src/withdrawal.py",
-                              "--start", 4, "--end", 8, "--id", "E1")
-        self.assertEqual(0, record.returncode, record.stderr)
-        self.assertEqual(bm.read_json(REPORT)["evidence"][0], json.loads(record.stdout))
-        valid = self.run_cli("validate", REPORT, "--repo", EXAMPLE)
-        self.assertEqual(0, valid.returncode, valid.stderr)
+    def test_render_offline_and_no_overwrite(self):
         with tempfile.TemporaryDirectory() as folder:
-            output = Path(folder) / "review.md"
-            rendered = self.run_cli("render", REPORT, "--repo", EXAMPLE, "--out", output)
-            self.assertEqual(0, rendered.returncode, rendered.stderr)
-            self.assertEqual((EXAMPLE / "REPORT.md").read_text(), output.read_text())
-            self.assertEqual(2, self.run_cli("render", REPORT, "--repo", EXAMPLE, "--out", output).returncode)
+            output = Path(folder) / 'map.html'
+            args=['render',REPORT,'--repo',f'repo1={EXAMPLE}','--out',output]
+            self.assertEqual(0,self.run_cli(*args).returncode)
+            self.assertEqual((EXAMPLE/'map.html').read_text(),output.read_text())
+            self.assertEqual(2,self.run_cli(*args).returncode)
 
-    def test_invalid_json_fails_with_useful_message(self):
+    def test_answer_is_saved_but_not_verified(self):
         with tempfile.TemporaryDirectory() as folder:
-            bad = Path(folder) / "report.json"
-            bad.write_text("{not json")
-            result = self.run_cli("validate", bad, "--repo", EXAMPLE)
-            self.assertEqual(2, result.returncode)
-            self.assertIn("Cannot read JSON", result.stderr)
+            path=Path(folder)/'report.json';bm.write_json(path,bm.read_json(REPORT))
+            result=self.run_cli('answer',path,'--repo',f'repo1={EXAMPLE}','--id','Q_refund','--text','Provider administrator owns recovery')
+            self.assertEqual(0,result.returncode,result.stderr)
+            self.assertEqual('answered',bm.read_json(path)['questions'][0]['status'])
+            self.assertIn('answered',self.run_cli('questions',path,'--repo',f'repo1={EXAMPLE}').stdout)
+            self.assertEqual(2,self.run_cli('answer',path,'--repo',f'repo1={EXAMPLE}','--id','absent','--text','answer').returncode)
+
+    def test_live_evidence_requires_original_capture_time(self):
+        result=self.run_cli('evidence','--root',EXAMPLE,'--path','snapshots/deployment.json','--start',1,'--end',3,'--id','E','--kind','deployment')
+        self.assertEqual(2,result.returncode)
+        self.assertIn('original --captured-at',result.stderr)
+
+    def test_bad_json_useful_error(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'bad.json';path.write_text('{bad')
+            result=self.run_cli('validate',path,'--repo',f'repo1={EXAMPLE}')
+            self.assertEqual(2,result.returncode);self.assertIn('Cannot read JSON',result.stderr)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main()

@@ -1,0 +1,34 @@
+{
+  "fictional": true,
+  "captured_at": "2026-10-24T12:00:00+00:00",
+  "account": "fictional-payments",
+  "environment": "production",
+  "revision": "fictional-v2",
+  "services": {
+    "api": {
+      "deployer": "employee",
+      "credential_references": [
+        "OPERATIONS_SIGNER",
+        "DESTINATION_ADMIN"
+      ]
+    },
+    "settlement": {
+      "owner": "independent-approver",
+      "payout_rule": "customer signature or settlement administrator"
+    }
+  },
+  "credential_ownership": {
+    "OPERATIONS_SIGNER": "company",
+    "DESTINATION_ADMIN": "company",
+    "CUSTOMER_KEY": "customer"
+  },
+  "permissions": [
+    "api can use operations signer and destination administrator",
+    "destination administrator changes destination allowlist",
+    "customer signature binds amount, recipient and nonce",
+    "settlement administrator can replace settlement code"
+  ],
+  "limitations": [
+    "External refund provider configuration is not supplied."
+  ]
+}

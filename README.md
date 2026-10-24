@@ -1,84 +1,92 @@
-# Assume Compromised
+# Security Boundary Mapping
 
-![Assume Compromised: give an attacker your server and map what they can do with the money.](assets/social-preview.jpg)
+![Security Boundary Mapping: map your system and see what survives a compromise.](assets/social-preview.jpg)
 
-**Give an attacker your server. Trace what they can do with the money.**
+**Map what an attacker can do after each part of your system is compromised, and which protections still hold.**
 
-A small, model-independent investigation kit for mapping security boundaries in software that moves money. Use it with a coding agent that can inspect your repository. It produces a money-movement map, an inventory of authority, and a list of restrictions that survive the stated compromise, fail under it, or remain unverified.
+A model-independent investigation workflow for your coding agent, backed by a dependency-free Python tool. Starts with the entire application: repositories, deployed workloads, credentials, deployment rights, administrators, recovery mechanisms, external providers and consequential operations. You do not need to pick a money route first.
 
-This is a method we think is useful. It is not presented as Ground's internal tooling or as a certification of anyone's architecture.
+The result is a private, offline interactive authority map, a compromise matrix, a deployment/credential inventory, and targeted questions about missing facts. Select a compromise scenario to see reachable authority and the restrictions that survive, fail, or remain unverified.
 
-## Run it
+## Start one investigation
 
-Requires Python 3.10 or newer. No third-party packages, API keys, or model subscription required by this package. Your chosen agent has its own requirements and data-handling terms.
+Requires Python 3.10+ and a coding agent. The package itself needs no model API key or cloud credentials. The agent needs repository access and your existing authenticated, read-only provider tools to inspect deployments.
 
 ```sh
-git clone https://github.com/samuyoon/assume-compromised.git
-cd assume-compromised
+git clone https://github.com/samuyoon/security-boundary-mapping.git
+cd security-boundary-mapping
 python3 boundary_map.py init \
-  --repo /path/to/your/code \
-  --operation "Customer withdrawal from request to final recipient" \
-  --compromised "Production payments API, including all credentials available to it" \
-  --out /path/to/private/boundary-review
+  --name "My application" \
+  --repo api=/path/to/api \
+  --repo contracts=/path/to/contracts \
+  --environment production \
+  --out /path/to/private/security-review
 ```
 
-Open your target repository in your coding agent and give it this instruction:
+Give your coding agent this instruction:
 
-> Read `/path/to/private/boundary-review/RUN.md`. Carry out the mapping and independent challenge passes. Write the report and validate the evidence. Do not modify the target system or perform transactions.
+> Read `/path/to/private/security-review/RUN.md` and carry out the entire investigation. Discover the system across the supplied repositories and connected read-only deployment tools. Ask me targeted questions about missing ownership, access and recovery facts. Continue independent work while waiting. Reconcile the answers, challenge the authority graph, and deliver the offline visual map. Do not modify the target system or move money.
 
-`init` creates instructions and an intentionally incomplete `report.json` in the output folder. It does **not** run an LLM, scan your code, or discover the boundaries itself. The agent does the investigation; the CLI checks the report's structure, internal consistency, references, and file-backed evidence.
+`init` indexes source-file and environment-variable-name candidates and creates a resumable workspace. **It does not run a model or inspect cloud accounts.** RUN.md instructs your host agent to perform those steps. File names and symbol matches are discovery hints, never established permissions or a completeness claim. No particular agent vendor or autonomous agent runner is required.
+
+## What the agent investigates
+
+1. Discover repositories, services, workers, deployment accounts, contracts, signing systems, providers, and environments.
+2. Read actual deployment metadata: deployed revision, workload identities, credential references, effective permissions, and who can deploy, configure, read secrets, impersonate, administer or recover accounts.
+3. Build a graph of authority, including indirect paths and multi-party approval requirements. Trace all discovered money/value and administrative operations within that graph.
+4. Ask the user about unresolved key holders, administrators, recovery powers, missing accounts and permission evidence. Save answers and reconcile them with observations.
+5. Evaluate separate and combined compromises, challenge the claimed separations, and render the map.
+
+Connected-tool availability varies. The package does not contain provider SDKs or silently log into cloud accounts. If the agent lacks read access, it asks for a connection or sanitized metadata export and records the gap. It never needs secret values. The review may take several conversational turns; missing facts remain visibly unverified.
+
+## View and resume
 
 ```sh
-python3 boundary_map.py validate /path/to/private/boundary-review/report.json \
-  --repo /path/to/your/code
-python3 boundary_map.py render /path/to/private/boundary-review/report.json \
-  --repo /path/to/your/code \
-  --out /path/to/private/boundary-review/report.md
+python3 boundary_map.py questions /path/to/private/security-review/report.json
+python3 boundary_map.py answer /path/to/private/security-review/report.json \
+  --id Q1 --text "The signing administrator is controlled by two separate hardware-key holders."
+# Have the agent reconcile the answer and obtain corroborating evidence.
+python3 boundary_map.py validate /path/to/private/security-review/report.json
+python3 boundary_map.py render /path/to/private/security-review/report.json \
+  --out /path/to/private/security-review/map.html
 ```
 
-Keep the output private. The authority inventory can reveal sensitive information about your system. Use credential names or roles, never secret values. The package performs no network requests or uploads; using a hosted coding agent may still transmit material to that agent's provider.
+Open `map.html` locally. It is standalone: no network requests, external libraries, or uploads. Repository paths are read from private workspace.json. Supply repeated `--repo ID=/path` arguments when reviewing the example or relocating repositories. Outputs are never silently overwritten.
 
-## What the investigation answers
+The CLI's `evidence` command records a selected, non-secret file's hash and line range:
 
-1. Where does the money move, from request to final receipt?
-2. What can the compromised component sign, approve, deploy, retry, recover, or redirect?
-3. Where is each restriction enforced?
-4. Who can change or bypass that restriction, including through deployment, policy administration, upgrades, approvals, and recovery?
-5. Which conclusions are supported by source code, which have deployment evidence, and what is still missing?
+```sh
+python3 boundary_map.py evidence --root /path/to/private/security-review \
+  --root-id artifacts --path deployment-snapshot.json --start 1 --end 40 --id E1 \
+  --kind deployment --captured-at 2026-10-24T12:00:00Z \
+  --provenance "Read-only provider metadata; account example; production; collector and limitations recorded in file"
+```
 
-A restriction enforced outside the server can still fail if the server holds the credential that changes it. A policy definition in a repository does not establish which policy is installed in production. An unknown is a result, not an invitation to assume safety.
+## Interpreting the result
 
-## Outputs
-
-The Markdown report includes an operation path, a boundary table, change/bypass authority, evidence references, challenge notes, and outstanding questions. See the [complete fictional example](examples/fictional-payments/REPORT.md) and the [report format](REPORT_FORMAT.md).
-
-| Classification | Meaning within the stated scope and evidence |
+| Outcome | Meaning within the reviewed model and snapshot |
 | --- | --- |
-| `survives` | The report supports independent enforcement and documents change/bypass authority outside the assumed attacker capabilities. |
-| `defeated` | The assumed attacker can bypass the restriction or use authority that changes it. |
-| `unverified` | Evidence or an authority path is unresolved. |
+| **Survives** | The action still requires authority outside this compromise; relevant review, ownership, coverage and deployment checks are resolved. |
+| **Defeated** | Observed grants reach the action, including through indirect administrative or recovery authority. This is not automatically a confirmed exploit. |
+| **Unverified** | A possible authority path, missing owner, unanswered question, source-only claim or coverage gap prevents a supported conclusion. |
 
-Every boundary also has an evidence basis: `source_only` or `deployment_snapshot`. A source-only conclusion is conditional on deployment matching the inspected code and configuration. A snapshot is evidence at a particular time, not a continuous guarantee. Even deployment snapshots need review for authenticity, completeness, and applicability.
+A valid report is not a security certification. The analyzer follows the supplied graph; it cannot prove the agent discovered every component or hidden authority path. It verifies evidence integrity, not provider authenticity. Every report exposes its scope, original capture times, coverage and exclusions.
 
-**A valid report is not a secure system.** The CLI cannot establish whether the agent found every authority path or whether the report's reasoning is correct. It does not assign a security score or a pass/fail verdict on your architecture.
+Keep outputs outside public repositories. Authority maps and metadata can themselves be sensitive. Your hosted agent's data-handling terms still apply.
 
-## What's in the box
+## Example and implementation
 
-- [Mapping instructions](prompts/map.md): trace an operation and its authority paths.
-- [Challenge instructions](prompts/challenge.md): attempt to disprove every claimed surviving restriction.
-- [Input template](scope.example.json): define the compromise and target operation.
-- [JSON Schema](report.schema.json) and [format guide](REPORT_FORMAT.md).
-- `boundary_map.py`: initialize a review, hash evidence, validate a report, and render Markdown.
-- A fictional repository and report demonstrating all three classifications.
+![Example compromise matrix showing surviving, defeated and unverified restrictions.](assets/example-preview.png)
 
-The workflow is sequential by default. The challenger is a fresh pass with the same agent or a separate reviewer if your tooling supports one; the package does not spawn agents.
+- [Interactive fictional example](examples/fictional-payments/map.html) — download and open locally.
+- [Markdown example](examples/fictional-payments/REPORT.md).
+- [Report format](REPORT_FORMAT.md), [schema](report.schema.json), and [investigation prompts](prompts/discover.md).
+- `boundary_map.py`: source candidate discovery, workspace setup, clarification tracking, evidence validation, fixed-point authority analysis and offline rendering.
+- `viewer.html`: selectable compromise scenarios, authority graph, evidence inventory and coverage gaps.
 
-## Develop
+This redesign replaces the former one-operation report format; old reports must be reinvestigated using the system graph. MIT licensed.
 
 ```sh
 python3 -m unittest discover -s tests -v
-python3 boundary_map.py validate examples/fictional-payments/report.json \
-  --repo examples/fictional-payments
+python3 boundary_map.py validate examples/fictional-payments/report.json --repo repo1=examples/fictional-payments
 ```
-
-MIT licensed. Contributions that improve evidence requirements, report clarity, and realistic examples are welcome.

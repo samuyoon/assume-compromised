@@ -1,243 +1,559 @@
 {
-  "report_version": "1",
-  "scope": {
-    "operation": "Fictional withdrawal and its provider refund recovery path",
-    "compromised_component": "The payments API runtime",
-    "attacker_capabilities": [
-      "Execute arbitrary code in the API runtime",
-      "Use the API runtime policy-admin credential and provider client"
+  "report_version": "2",
+  "system": {
+    "name": "Fictional Payments \u2014 illustrative architecture",
+    "environments": [
+      "production"
     ],
-    "excluded_capabilities": [
-      "Independent customer signing keys and settlement-service deployment authority are excluded by this fictional scenario"
-    ],
-    "evidence_limits": [
-      "All evidence is fictional source code; no deployed service or provider configuration was inspected"
+    "exclusions": [
+      "No real infrastructure is queried; all evidence is fictional."
     ]
   },
-  "steps": [
+  "nodes": [
     {
-      "id": "S1",
-      "action": "Request withdrawal",
-      "actor": "Payments API",
-      "authority": "API can submit requests and administer the destination allowlist",
-      "credential_refs": [
-        "runtime policy-admin role",
-        "provider client"
-      ],
-      "inputs": "Amount, recipient, nonce, customer signature",
-      "outputs": "Request sent to independent settlement service",
-      "boundary_ids": [
-        "B1"
-      ],
+      "id": "internet",
+      "kind": "principal",
+      "label": "Public internet",
+      "environment": "production",
+      "owner_ids": [],
+      "details": "No internal access assumed.",
       "evidence_ids": [
-        "E1",
-        "E2"
+        "Elive",
+        "Esource"
       ]
     },
     {
-      "id": "S2",
-      "action": "Authorize and transfer",
-      "actor": "Independent settlement service",
-      "authority": "Settlement service checks customer authorization and nonce",
-      "credential_refs": [],
-      "inputs": "Customer-signed amount, recipient, nonce",
-      "outputs": "Transfer to the signed recipient",
-      "boundary_ids": [
-        "B2"
-      ],
+      "id": "employee",
+      "kind": "principal",
+      "label": "Employee deploy account",
+      "environment": "production",
+      "owner_ids": [],
+      "details": "Can deploy API code; cannot replace independent settlement code.",
       "evidence_ids": [
-        "E3"
+        "Elive",
+        "Esource"
       ]
     },
     {
-      "id": "S3",
-      "action": "Recover through provider refund",
-      "actor": "Payments API",
-      "authority": "API can request a provider refund; recipient and administrative rules are unknown",
-      "credential_refs": [
-        "runtime policy-admin role",
-        "provider client"
-      ],
-      "inputs": "Provider order ID",
-      "outputs": "Refund outcome and final destination are unresolved",
-      "boundary_ids": [
-        "B3"
-      ],
+      "id": "company",
+      "kind": "principal",
+      "label": "Company administrator",
+      "environment": "production",
+      "owner_ids": [],
+      "details": "Controls operational credential administration.",
       "evidence_ids": [
-        "E4"
+        "Elive",
+        "Esource"
       ]
+    },
+    {
+      "id": "customer",
+      "kind": "principal",
+      "label": "Customer",
+      "environment": "production",
+      "owner_ids": [],
+      "details": "Controls customer signing credential and its recovery.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "approver",
+      "kind": "principal",
+      "label": "Independent approver",
+      "environment": "production",
+      "owner_ids": [],
+      "details": "Can replace settlement code; outside API and employee access.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "api",
+      "kind": "service",
+      "label": "API runtime control",
+      "environment": "production",
+      "owner_ids": [
+        "company"
+      ],
+      "details": "Fictional production API. Employee can deploy code. Environment exposes OPERATIONS_SIGNER and DESTINATION_ADMIN references, not customer key.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "ops",
+      "kind": "credential",
+      "label": "Use operations signer",
+      "environment": "production",
+      "owner_ids": [
+        "company"
+      ],
+      "details": "Available to API; company administers/replaces it. No independent payout approval authority.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "admin",
+      "kind": "credential",
+      "label": "Use destination admin",
+      "environment": "production",
+      "owner_ids": [
+        "company"
+      ],
+      "details": "Available to API. Can change destination policy; this deliberately demonstrates a defeated boundary.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "customer_key",
+      "kind": "credential",
+      "label": "Use customer signing key",
+      "environment": "production",
+      "owner_ids": [
+        "customer"
+      ],
+      "details": "Held by customer; replacement requires customer authority. Not available to API or employee.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "settlement",
+      "kind": "control",
+      "label": "Control settlement enforcement",
+      "environment": "production",
+      "owner_ids": [
+        "approver"
+      ],
+      "details": "Independent deployment. Replacing settlement code permits payout bypass; represented explicitly.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "provider",
+      "kind": "control",
+      "label": "Control refund policy",
+      "environment": "production",
+      "owner_ids": [],
+      "details": "External provider ownership and recipient/recovery rules are unresolved.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "payout",
+      "kind": "action",
+      "label": "Approve external payout",
+      "environment": "production",
+      "owner_ids": [
+        "customer"
+      ],
+      "details": "Requires customer-bound signature or control of settlement enforcement.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "destination",
+      "kind": "action",
+      "label": "Change allowed recipients",
+      "environment": "production",
+      "owner_ids": [
+        "company"
+      ],
+      "details": "Destination administrator can replace allowlist.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "refund",
+      "kind": "action",
+      "label": "Redirect provider refund",
+      "environment": "production",
+      "owner_ids": [
+        "company"
+      ],
+      "details": "Provider route exists; effective destination permissions are unknown.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    }
+  ],
+  "edges": [
+    {
+      "id": "deploy",
+      "source": "employee",
+      "target": "api",
+      "requires_all": [],
+      "description": "Deploy arbitrary API code and use runtime credentials.",
+      "relation": "deploy",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "api_ops",
+      "source": "api",
+      "target": "ops",
+      "requires_all": [],
+      "description": "api grants ops",
+      "relation": "use_credential",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "api_admin",
+      "source": "api",
+      "target": "admin",
+      "requires_all": [],
+      "description": "api grants admin",
+      "relation": "use_credential",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "customer_sign",
+      "source": "customer",
+      "target": "customer_key",
+      "requires_all": [],
+      "description": "customer grants customer_key",
+      "relation": "use_credential",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "sign_payout",
+      "source": "api",
+      "target": "payout",
+      "requires_all": [
+        "ops",
+        "customer_key"
+      ],
+      "description": "Customer signature AND operations signing capability required.",
+      "relation": "execute",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "settlement_admin",
+      "source": "approver",
+      "target": "settlement",
+      "requires_all": [],
+      "description": "approver grants settlement",
+      "relation": "administer",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "replace_settlement",
+      "source": "settlement",
+      "target": "payout",
+      "requires_all": [],
+      "description": "Replacement enforcement code bypasses the normal signature restriction.",
+      "relation": "replace",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "replace_allowlist",
+      "source": "admin",
+      "target": "destination",
+      "requires_all": [],
+      "description": "admin grants destination",
+      "relation": "administer",
+      "basis": "observed",
+      "evidence_ids": [
+        "Elive"
+      ]
+    },
+    {
+      "id": "refund_unknown",
+      "source": "api",
+      "target": "refund",
+      "requires_all": [],
+      "description": "Provider may permit destination changes; missing provider policy evidence.",
+      "relation": "execute",
+      "basis": "unknown",
+      "evidence_ids": []
     }
   ],
   "boundaries": [
     {
-      "id": "B1",
-      "restriction": "Destination allowlist",
-      "enforced_by": "External policy service",
-      "enforcement_location": "outside",
-      "status": "defeated",
-      "evidence_basis": "source_only",
-      "reason": "The policy is checked externally, but the API holds the credential that replaces its allowlist. The assumed attacker inherits that administrative authority.",
-      "change_paths": [
-        {
-          "principal": "API runtime policy administrator",
-          "mechanism": "Replace the allowlist using the runtime credential",
-          "attacker_control": "yes",
-          "evidence_ids": [
-            "E2"
-          ]
-        }
+      "id": "B_payout",
+      "label": "Customer payout approval",
+      "action_id": "payout",
+      "enforcer_id": "settlement",
+      "gate_ids": [
+        "sign_payout",
+        "replace_settlement"
       ],
+      "coverage_ids": [
+        "C_system_inventory",
+        "C_source",
+        "C_deployment",
+        "C_credentials",
+        "C_administration",
+        "C_recovery"
+      ],
+      "challenge": "supported",
+      "challenge_notes": "Reviewed deployment, administration, recovery and alternative paths in this fictional model.",
+      "remaining_checks": [],
       "evidence_ids": [
-        "E1",
-        "E2"
-      ],
-      "production_checks": [
-        "Determine whether a deployed runtime actually holds policy administration rights."
+        "Elive",
+        "Esource"
       ]
     },
     {
-      "id": "B2",
-      "restriction": "Customer authorization of the exact recipient and amount",
-      "enforced_by": "Independent settlement service",
-      "enforcement_location": "outside",
-      "status": "survives",
-      "evidence_basis": "source_only",
-      "reason": "Conditional source-only conclusion: the fictional service checks the customer signature and consumes a nonce. The scenario excludes the customer key and settlement deployment authority. Signature implementation and completeness of authority separation are assumptions, not proven properties.",
-      "change_paths": [
-        {
-          "principal": "Customer key holder",
-          "mechanism": "Replace the customer key using current-customer authorization",
-          "attacker_control": "no",
-          "evidence_ids": [
-            "E3"
-          ]
-        },
-        {
-          "principal": "Settlement-service deployer",
-          "mechanism": "Change service code; this principal is outside the scenario\u2019s assumed compromise",
-          "attacker_control": "no",
-          "evidence_ids": [
-            "E3"
-          ]
-        }
+      "id": "B_dest",
+      "label": "Destination allowlist administration",
+      "action_id": "destination",
+      "enforcer_id": "admin",
+      "gate_ids": [
+        "replace_allowlist"
       ],
+      "coverage_ids": [
+        "C_system_inventory",
+        "C_source",
+        "C_deployment",
+        "C_credentials",
+        "C_administration",
+        "C_recovery"
+      ],
+      "challenge": "supported",
+      "challenge_notes": "Reviewed deployment, administration, recovery and alternative paths in this fictional model.",
+      "remaining_checks": [],
       "evidence_ids": [
-        "E3"
-      ],
-      "production_checks": [
-        "Verify the deployed settlement implementation and cryptographic checks.",
-        "Verify customer-key recovery, deployer authority, and all admin paths remain outside API control."
+        "Elive",
+        "Esource"
       ]
     },
     {
-      "id": "B3",
-      "restriction": "Refund destination binding",
-      "enforced_by": "Third-party provider",
-      "enforcement_location": "unknown",
-      "status": "unverified",
-      "evidence_basis": "source_only",
-      "reason": "The API calls a provider refund method, but no destination or administrative policy was supplied. This recovery path could change the overall exfiltration assessment.",
-      "change_paths": [
-        {
-          "principal": "Provider administrator",
-          "mechanism": "Configure refund destination or account recovery",
-          "attacker_control": "unknown",
-          "evidence_ids": []
-        }
+      "id": "B_refund",
+      "label": "Refund destination restriction",
+      "action_id": "refund",
+      "enforcer_id": "provider",
+      "gate_ids": [
+        "refund_unknown"
+      ],
+      "coverage_ids": [
+        "C_system_inventory",
+        "C_source",
+        "C_deployment",
+        "C_credentials",
+        "C_administration",
+        "C_recovery",
+        "C_external_provider"
+      ],
+      "challenge": "unresolved",
+      "challenge_notes": "Reviewed deployment, administration, recovery and alternative paths in this fictional model.",
+      "remaining_checks": [
+        "Inspect provider destination policy and administrator recovery."
       ],
       "evidence_ids": [
-        "E4"
+        "Elive",
+        "Esource"
+      ]
+    }
+  ],
+  "scenarios": [
+    {
+      "id": "S_public",
+      "label": "Public internet",
+      "initial_control": [
+        "internet"
       ],
-      "production_checks": [
-        "Obtain sanitized provider destination, signing, administration, and recovery configuration."
+      "assumptions": "Only stated initial authority is assumed. Derived powers follow the reviewed grants; all observations are fictional.",
+      "review": "supported"
+    },
+    {
+      "id": "S_employee",
+      "label": "Employee deploy account",
+      "initial_control": [
+        "employee"
+      ],
+      "assumptions": "Only stated initial authority is assumed. Derived powers follow the reviewed grants; all observations are fictional.",
+      "review": "supported"
+    },
+    {
+      "id": "S_runtime",
+      "label": "Production API and its credentials",
+      "initial_control": [
+        "api"
+      ],
+      "assumptions": "Only stated initial authority is assumed. Derived powers follow the reviewed grants; all observations are fictional.",
+      "review": "supported"
+    },
+    {
+      "id": "S_customer",
+      "label": "Customer signing credential",
+      "initial_control": [
+        "customer_key"
+      ],
+      "assumptions": "Only stated initial authority is assumed. Derived powers follow the reviewed grants; all observations are fictional.",
+      "review": "supported"
+    },
+    {
+      "id": "S_admin",
+      "label": "Independent settlement administrator",
+      "initial_control": [
+        "approver"
+      ],
+      "assumptions": "Only stated initial authority is assumed. Derived powers follow the reviewed grants; all observations are fictional.",
+      "review": "supported"
+    }
+  ],
+  "coverage": [
+    {
+      "id": "C_system_inventory",
+      "environment": "production",
+      "category": "system_inventory",
+      "subject": "system inventory",
+      "status": "inspected",
+      "notes": "Reviewed fictional source and snapshot within stated scope.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "C_source",
+      "environment": "production",
+      "category": "source",
+      "subject": "source",
+      "status": "inspected",
+      "notes": "Reviewed fictional source and snapshot within stated scope.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "C_deployment",
+      "environment": "production",
+      "category": "deployment",
+      "subject": "deployment",
+      "status": "inspected",
+      "notes": "Reviewed fictional source and snapshot within stated scope.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "C_credentials",
+      "environment": "production",
+      "category": "credentials",
+      "subject": "credentials",
+      "status": "inspected",
+      "notes": "Reviewed fictional source and snapshot within stated scope.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "C_administration",
+      "environment": "production",
+      "category": "administration",
+      "subject": "administration",
+      "status": "inspected",
+      "notes": "Reviewed fictional source and snapshot within stated scope.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "C_recovery",
+      "environment": "production",
+      "category": "recovery",
+      "subject": "recovery",
+      "status": "inspected",
+      "notes": "Reviewed fictional source and snapshot within stated scope.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
+      ]
+    },
+    {
+      "id": "C_external_provider",
+      "environment": "production",
+      "category": "external_provider",
+      "subject": "external provider",
+      "status": "partial",
+      "notes": "Fictional fixture; refund provider metadata unavailable.",
+      "evidence_ids": [
+        "Elive",
+        "Esource"
       ]
     }
   ],
   "evidence": [
     {
-      "id": "E1",
-      "kind": "repository",
-      "root": "repository",
+      "id": "Esource",
+      "root": "repo1",
       "path": "src/withdrawal.py",
-      "start_line": 4,
-      "end_line": 8,
-      "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
-      "captured_at": "",
-      "notes": ""
-    },
-    {
-      "id": "E2",
-      "kind": "repository",
-      "root": "repository",
-      "path": "src/withdrawal.py",
-      "start_line": 11,
-      "end_line": 14,
-      "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
-      "captured_at": "",
-      "notes": ""
-    },
-    {
-      "id": "E3",
-      "kind": "repository",
-      "root": "repository",
-      "path": "src/withdrawal.py",
-      "start_line": 17,
-      "end_line": 28,
-      "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
-      "captured_at": "",
-      "notes": ""
-    },
-    {
-      "id": "E4",
-      "kind": "repository",
-      "root": "repository",
-      "path": "src/withdrawal.py",
-      "start_line": 31,
+      "start_line": 1,
       "end_line": 34,
       "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
-      "captured_at": "",
-      "notes": ""
-    }
-  ],
-  "challenges": [
-    {
-      "boundary_id": "B1",
-      "check": "Can the runtime change the independently enforced policy?",
-      "outcome": "revised",
-      "result": "Yes. External enforcement alone was insufficient; classification is defeated.",
-      "evidence_ids": [
-        "E2"
-      ]
+      "kind": "source",
+      "captured_at": "2026-10-24T23:37:50.033381+00:00",
+      "provenance": ""
     },
     {
-      "boundary_id": "B2",
-      "check": "Can changing the API request replace the signed recipient or customer key?",
-      "outcome": "supported",
-      "result": "The pseudocode binds both fields and key replacement to customer authorization, conditional on excluded service-deployment authority and assumed verifier behavior.",
-      "evidence_ids": [
-        "E3"
-      ]
-    },
-    {
-      "boundary_id": "B3",
-      "check": "Can the provider refund bypass the normal payout path?",
-      "outcome": "unresolved",
-      "result": "Provider rules were not supplied. The report keeps this boundary unverified.",
-      "evidence_ids": [
-        "E4"
-      ]
+      "id": "Elive",
+      "root": "repo1",
+      "path": "snapshots/deployment.json",
+      "start_line": 1,
+      "end_line": 34,
+      "sha256": "a5749c3826dde1151a847b6dec2bef0e660de664c3d5b318bb426f3cca60ff1b",
+      "kind": "deployment",
+      "captured_at": "2026-10-24T12:00:00+00:00",
+      "provenance": "Fictional fixture, never a real provider observation. Account fictional-payments / production."
     }
   ],
-  "open_questions": [
+  "questions": [
     {
-      "boundary_id": "B3",
-      "question": "Who chooses refund recipients and who can change that rule?",
-      "needed_evidence": "Sanitized provider configuration and administrative/recovery authority inventory."
+      "id": "Q_refund",
+      "question": "Who can change the refund recipient and recover the provider administrator?",
+      "affects": [
+        "provider",
+        "B_refund",
+        "C_external_provider"
+      ],
+      "needed_evidence": "Provider effective permissions, destination restrictions and recovery metadata.",
+      "answer": "",
+      "status": "open",
+      "evidence_ids": []
     }
-  ],
-  "limitations": [
-    "This is an illustrative, deliberately incomplete system, not an audit of runnable production software.",
-    "Customer signature verification, nonce enforcement, custody implementation, service isolation, and the completeness of change/recovery paths are assumed in the pseudocode; none has been independently established.",
-    "The conclusions apply only to the stated operation and assumptions. A surviving payout restriction does not establish protection against all forms of loss."
   ]
 }

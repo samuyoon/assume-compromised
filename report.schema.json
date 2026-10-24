@@ -4,21 +4,17 @@
     "report_version": {
       "type": "string",
       "enum": [
-        "1"
+        "2"
       ]
     },
-    "scope": {
+    "system": {
       "type": "object",
       "properties": {
-        "operation": {
+        "name": {
           "type": "string",
           "minLength": 1
         },
-        "compromised_component": {
-          "type": "string",
-          "minLength": 1
-        },
-        "attacker_capabilities": {
+        "environments": {
           "type": "array",
           "items": {
             "type": "string",
@@ -26,7 +22,114 @@
           },
           "minItems": 1
         },
-        "excluded_capabilities": {
+        "exclusions": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "name",
+        "environments",
+        "exclusions"
+      ],
+      "additionalProperties": false
+    },
+    "nodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/node"
+      },
+      "minItems": 1
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      },
+      "minItems": 1
+    },
+    "boundaries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/boundary"
+      },
+      "minItems": 1
+    },
+    "scenarios": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/scenario"
+      },
+      "minItems": 1
+    },
+    "coverage": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/coverage"
+      },
+      "minItems": 1
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/evidence"
+      },
+      "minItems": 1
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/question"
+      },
+      "minItems": 0
+    }
+  },
+  "required": [
+    "report_version",
+    "system",
+    "nodes",
+    "edges",
+    "boundaries",
+    "scenarios",
+    "coverage",
+    "evidence",
+    "questions"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Security Boundary Mapping system report",
+  "$defs": {
+    "node": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "principal",
+            "credential",
+            "service",
+            "control",
+            "resource",
+            "action"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "owner_ids": {
           "type": "array",
           "items": {
             "type": "string",
@@ -34,364 +137,389 @@
           },
           "minItems": 0
         },
-        "evidence_limits": {
+        "details": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "id",
+        "kind",
+        "label",
+        "environment",
+        "owner_ids",
+        "details",
+        "evidence_ids"
+      ],
+      "additionalProperties": false
+    },
+    "edge": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "source": {
+          "type": "string",
+          "minLength": 1
+        },
+        "target": {
+          "type": "string",
+          "minLength": 1
+        },
+        "requires_all": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "description": {
+          "type": "string",
+          "minLength": 1
+        },
+        "basis": {
+          "type": "string",
+          "enum": [
+            "observed",
+            "source",
+            "unknown"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "relation": {
+          "type": "string",
+          "enum": [
+            "deploy",
+            "use_credential",
+            "read_secret",
+            "administer",
+            "recover",
+            "replace",
+            "upgrade",
+            "execute",
+            "impersonate",
+            "access",
+            "other"
+          ]
+        }
+      },
+      "required": [
+        "id",
+        "source",
+        "target",
+        "requires_all",
+        "description",
+        "basis",
+        "evidence_ids",
+        "relation"
+      ],
+      "additionalProperties": false
+    },
+    "boundary": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "action_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "enforcer_id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gate_ids": {
           "type": "array",
           "items": {
             "type": "string",
             "minLength": 1
           },
           "minItems": 1
+        },
+        "coverage_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "challenge": {
+          "type": "string",
+          "enum": [
+            "supported",
+            "revised",
+            "unresolved"
+          ]
+        },
+        "challenge_notes": {
+          "type": "string",
+          "minLength": 1
+        },
+        "remaining_checks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
         }
       },
       "required": [
-        "operation",
-        "compromised_component",
-        "attacker_capabilities",
-        "excluded_capabilities",
-        "evidence_limits"
+        "id",
+        "label",
+        "action_id",
+        "enforcer_id",
+        "gate_ids",
+        "coverage_ids",
+        "challenge",
+        "challenge_notes",
+        "remaining_checks",
+        "evidence_ids"
       ],
       "additionalProperties": false
     },
-    "steps": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-          },
-          "action": {
-            "type": "string",
-            "minLength": 1
-          },
-          "actor": {
-            "type": "string",
-            "minLength": 1
-          },
-          "authority": {
-            "type": "string",
-            "minLength": 1
-          },
-          "credential_refs": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "minItems": 0
-          },
-          "inputs": {
-            "type": "string",
-            "minLength": 1
-          },
-          "outputs": {
-            "type": "string",
-            "minLength": 1
-          },
-          "boundary_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-            },
-            "minItems": 0
-          },
-          "evidence_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-            },
-            "minItems": 1
-          }
+    "scenario": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
         },
-        "required": [
-          "id",
-          "action",
-          "actor",
-          "authority",
-          "credential_refs",
-          "inputs",
-          "outputs",
-          "boundary_ids",
-          "evidence_ids"
-        ],
-        "additionalProperties": false
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "initial_control": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "assumptions": {
+          "type": "string",
+          "minLength": 1
+        },
+        "review": {
+          "type": "string",
+          "enum": [
+            "supported",
+            "unresolved"
+          ]
+        }
       },
-      "minItems": 1
+      "required": [
+        "id",
+        "label",
+        "initial_control",
+        "assumptions",
+        "review"
+      ],
+      "additionalProperties": false
     },
-    "boundaries": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-          },
-          "restriction": {
-            "type": "string",
-            "minLength": 1
-          },
-          "enforced_by": {
-            "type": "string",
-            "minLength": 1
-          },
-          "enforcement_location": {
-            "type": "string",
-            "enum": [
-              "inside",
-              "outside",
-              "unknown"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "survives",
-              "defeated",
-              "unverified"
-            ]
-          },
-          "evidence_basis": {
-            "type": "string",
-            "enum": [
-              "source_only",
-              "deployment_snapshot"
-            ]
-          },
-          "reason": {
-            "type": "string",
-            "minLength": 1
-          },
-          "change_paths": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "principal": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "mechanism": {
-                  "type": "string",
-                  "minLength": 1
-                },
-                "attacker_control": {
-                  "type": "string",
-                  "enum": [
-                    "yes",
-                    "no",
-                    "unknown"
-                  ]
-                },
-                "evidence_ids": {
-                  "type": "array",
-                  "items": {
-                    "type": "string",
-                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-                  },
-                  "minItems": 0
-                }
-              },
-              "required": [
-                "principal",
-                "mechanism",
-                "attacker_control",
-                "evidence_ids"
-              ],
-              "additionalProperties": false
-            },
-            "minItems": 1
-          },
-          "evidence_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-            },
-            "minItems": 0
-          },
-          "production_checks": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "minLength": 1
-            },
-            "minItems": 0
-          }
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
         },
-        "required": [
-          "id",
-          "restriction",
-          "enforced_by",
-          "enforcement_location",
-          "status",
-          "evidence_basis",
-          "reason",
-          "change_paths",
-          "evidence_ids",
-          "production_checks"
-        ],
-        "additionalProperties": false
+        "environment": {
+          "type": "string",
+          "minLength": 1
+        },
+        "category": {
+          "type": "string",
+          "enum": [
+            "system_inventory",
+            "source",
+            "deployment",
+            "credentials",
+            "administration",
+            "recovery",
+            "external_provider"
+          ]
+        },
+        "subject": {
+          "type": "string",
+          "minLength": 1
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "inspected",
+            "partial",
+            "unavailable",
+            "excluded"
+          ]
+        },
+        "notes": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
       },
-      "minItems": 1
+      "required": [
+        "id",
+        "environment",
+        "category",
+        "subject",
+        "status",
+        "notes",
+        "evidence_ids"
+      ],
+      "additionalProperties": false
+    },
+    "question": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1
+        },
+        "affects": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "needed_evidence": {
+          "type": "string",
+          "minLength": 1
+        },
+        "answer": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "open",
+            "answered",
+            "resolved"
+          ]
+        },
+        "evidence_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        }
+      },
+      "required": [
+        "id",
+        "question",
+        "affects",
+        "needed_evidence",
+        "answer",
+        "status",
+        "evidence_ids"
+      ],
+      "additionalProperties": false
     },
     "evidence": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string",
-            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "repository",
-              "deployment_snapshot",
-              "operator_attestation"
-            ]
-          },
-          "root": {
-            "type": "string",
-            "enum": [
-              "repository",
-              "artifacts"
-            ]
-          },
-          "path": {
-            "type": "string",
-            "minLength": 1
-          },
-          "start_line": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "end_line": {
-            "type": "integer",
-            "minimum": 1
-          },
-          "sha256": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          },
-          "captured_at": {
-            "type": "string"
-          },
-          "notes": {
-            "type": "string"
-          }
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
         },
-        "required": [
-          "id",
-          "kind",
-          "root",
-          "path",
-          "start_line",
-          "end_line",
-          "sha256",
-          "captured_at",
-          "notes"
-        ],
-        "additionalProperties": false
-      },
-      "minItems": 1
-    },
-    "challenges": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "boundary_id": {
-            "type": "string",
-            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-          },
-          "check": {
-            "type": "string",
-            "minLength": 1
-          },
-          "outcome": {
-            "type": "string",
-            "enum": [
-              "supported",
-              "revised",
-              "unresolved"
-            ]
-          },
-          "result": {
-            "type": "string",
-            "minLength": 1
-          },
-          "evidence_ids": {
-            "type": "array",
-            "items": {
-              "type": "string",
-              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
-            },
-            "minItems": 0
-          }
+        "root": {
+          "type": "string",
+          "minLength": 1
         },
-        "required": [
-          "boundary_id",
-          "check",
-          "outcome",
-          "result",
-          "evidence_ids"
-        ],
-        "additionalProperties": false
-      },
-      "minItems": 1
-    },
-    "open_questions": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "properties": {
-          "boundary_id": {
-            "type": "string",
-            "minLength": 1
-          },
-          "question": {
-            "type": "string",
-            "minLength": 1
-          },
-          "needed_evidence": {
-            "type": "string",
-            "minLength": 1
-          }
+        "path": {
+          "type": "string",
+          "minLength": 1
         },
-        "required": [
-          "boundary_id",
-          "question",
-          "needed_evidence"
-        ],
-        "additionalProperties": false
+        "start_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "end_line": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "sha256": {
+          "type": "string",
+          "minLength": 1
+        },
+        "kind": {
+          "type": "string",
+          "enum": [
+            "source",
+            "deployment",
+            "attestation"
+          ]
+        },
+        "captured_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "provenance": {
+          "type": "string"
+        }
       },
-      "minItems": 0
-    },
-    "limitations": {
-      "type": "array",
-      "items": {
-        "type": "string",
-        "minLength": 1
-      },
-      "minItems": 1
+      "required": [
+        "id",
+        "root",
+        "path",
+        "start_line",
+        "end_line",
+        "sha256",
+        "kind",
+        "captured_at",
+        "provenance"
+      ],
+      "additionalProperties": false
     }
-  },
-  "required": [
-    "report_version",
-    "scope",
-    "steps",
-    "boundaries",
-    "evidence",
-    "challenges",
-    "open_questions",
-    "limitations"
-  ],
-  "additionalProperties": false,
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "title": "Assume Compromised report"
+  }
 }

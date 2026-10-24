@@ -1,0 +1,14 @@
+{
+  "operation": "Customer withdrawal from initial request to final receipt",
+  "compromised_component": "Production payments API",
+  "attacker_capabilities": [
+    "Execute arbitrary code in the compromised runtime",
+    "Use every credential and permission available to that runtime"
+  ],
+  "excluded_capabilities": [
+    "Independent customer signing keys, unless evidence shows the runtime can obtain them"
+  ],
+  "evidence_limits": [
+    "Repository inspection only; deployed configuration is not supplied"
+  ]
+}

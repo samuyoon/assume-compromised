@@ -1,0 +1,243 @@
+{
+  "report_version": "1",
+  "scope": {
+    "operation": "Fictional withdrawal and its provider refund recovery path",
+    "compromised_component": "The payments API runtime",
+    "attacker_capabilities": [
+      "Execute arbitrary code in the API runtime",
+      "Use the API runtime policy-admin credential and provider client"
+    ],
+    "excluded_capabilities": [
+      "Independent customer signing keys and settlement-service deployment authority are excluded by this fictional scenario"
+    ],
+    "evidence_limits": [
+      "All evidence is fictional source code; no deployed service or provider configuration was inspected"
+    ]
+  },
+  "steps": [
+    {
+      "id": "S1",
+      "action": "Request withdrawal",
+      "actor": "Payments API",
+      "authority": "API can submit requests and administer the destination allowlist",
+      "credential_refs": [
+        "runtime policy-admin role",
+        "provider client"
+      ],
+      "inputs": "Amount, recipient, nonce, customer signature",
+      "outputs": "Request sent to independent settlement service",
+      "boundary_ids": [
+        "B1"
+      ],
+      "evidence_ids": [
+        "E1",
+        "E2"
+      ]
+    },
+    {
+      "id": "S2",
+      "action": "Authorize and transfer",
+      "actor": "Independent settlement service",
+      "authority": "Settlement service checks customer authorization and nonce",
+      "credential_refs": [],
+      "inputs": "Customer-signed amount, recipient, nonce",
+      "outputs": "Transfer to the signed recipient",
+      "boundary_ids": [
+        "B2"
+      ],
+      "evidence_ids": [
+        "E3"
+      ]
+    },
+    {
+      "id": "S3",
+      "action": "Recover through provider refund",
+      "actor": "Payments API",
+      "authority": "API can request a provider refund; recipient and administrative rules are unknown",
+      "credential_refs": [
+        "runtime policy-admin role",
+        "provider client"
+      ],
+      "inputs": "Provider order ID",
+      "outputs": "Refund outcome and final destination are unresolved",
+      "boundary_ids": [
+        "B3"
+      ],
+      "evidence_ids": [
+        "E4"
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "id": "B1",
+      "restriction": "Destination allowlist",
+      "enforced_by": "External policy service",
+      "enforcement_location": "outside",
+      "status": "defeated",
+      "evidence_basis": "source_only",
+      "reason": "The policy is checked externally, but the API holds the credential that replaces its allowlist. The assumed attacker inherits that administrative authority.",
+      "change_paths": [
+        {
+          "principal": "API runtime policy administrator",
+          "mechanism": "Replace the allowlist using the runtime credential",
+          "attacker_control": "yes",
+          "evidence_ids": [
+            "E2"
+          ]
+        }
+      ],
+      "evidence_ids": [
+        "E1",
+        "E2"
+      ],
+      "production_checks": [
+        "Determine whether a deployed runtime actually holds policy administration rights."
+      ]
+    },
+    {
+      "id": "B2",
+      "restriction": "Customer authorization of the exact recipient and amount",
+      "enforced_by": "Independent settlement service",
+      "enforcement_location": "outside",
+      "status": "survives",
+      "evidence_basis": "source_only",
+      "reason": "Conditional source-only conclusion: the fictional service checks the customer signature and consumes a nonce. The scenario excludes the customer key and settlement deployment authority. Signature implementation and completeness of authority separation are assumptions, not proven properties.",
+      "change_paths": [
+        {
+          "principal": "Customer key holder",
+          "mechanism": "Replace the customer key using current-customer authorization",
+          "attacker_control": "no",
+          "evidence_ids": [
+            "E3"
+          ]
+        },
+        {
+          "principal": "Settlement-service deployer",
+          "mechanism": "Change service code; this principal is outside the scenario\u2019s assumed compromise",
+          "attacker_control": "no",
+          "evidence_ids": [
+            "E3"
+          ]
+        }
+      ],
+      "evidence_ids": [
+        "E3"
+      ],
+      "production_checks": [
+        "Verify the deployed settlement implementation and cryptographic checks.",
+        "Verify customer-key recovery, deployer authority, and all admin paths remain outside API control."
+      ]
+    },
+    {
+      "id": "B3",
+      "restriction": "Refund destination binding",
+      "enforced_by": "Third-party provider",
+      "enforcement_location": "unknown",
+      "status": "unverified",
+      "evidence_basis": "source_only",
+      "reason": "The API calls a provider refund method, but no destination or administrative policy was supplied. This recovery path could change the overall exfiltration assessment.",
+      "change_paths": [
+        {
+          "principal": "Provider administrator",
+          "mechanism": "Configure refund destination or account recovery",
+          "attacker_control": "unknown",
+          "evidence_ids": []
+        }
+      ],
+      "evidence_ids": [
+        "E4"
+      ],
+      "production_checks": [
+        "Obtain sanitized provider destination, signing, administration, and recovery configuration."
+      ]
+    }
+  ],
+  "evidence": [
+    {
+      "id": "E1",
+      "kind": "repository",
+      "root": "repository",
+      "path": "src/withdrawal.py",
+      "start_line": 4,
+      "end_line": 8,
+      "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
+      "captured_at": "",
+      "notes": ""
+    },
+    {
+      "id": "E2",
+      "kind": "repository",
+      "root": "repository",
+      "path": "src/withdrawal.py",
+      "start_line": 11,
+      "end_line": 14,
+      "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
+      "captured_at": "",
+      "notes": ""
+    },
+    {
+      "id": "E3",
+      "kind": "repository",
+      "root": "repository",
+      "path": "src/withdrawal.py",
+      "start_line": 17,
+      "end_line": 28,
+      "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
+      "captured_at": "",
+      "notes": ""
+    },
+    {
+      "id": "E4",
+      "kind": "repository",
+      "root": "repository",
+      "path": "src/withdrawal.py",
+      "start_line": 31,
+      "end_line": 34,
+      "sha256": "b52a2edd77bfcddf7515b3973235c49fef4a04116be7ce1a224c38d549a7476c",
+      "captured_at": "",
+      "notes": ""
+    }
+  ],
+  "challenges": [
+    {
+      "boundary_id": "B1",
+      "check": "Can the runtime change the independently enforced policy?",
+      "outcome": "revised",
+      "result": "Yes. External enforcement alone was insufficient; classification is defeated.",
+      "evidence_ids": [
+        "E2"
+      ]
+    },
+    {
+      "boundary_id": "B2",
+      "check": "Can changing the API request replace the signed recipient or customer key?",
+      "outcome": "supported",
+      "result": "The pseudocode binds both fields and key replacement to customer authorization, conditional on excluded service-deployment authority and assumed verifier behavior.",
+      "evidence_ids": [
+        "E3"
+      ]
+    },
+    {
+      "boundary_id": "B3",
+      "check": "Can the provider refund bypass the normal payout path?",
+      "outcome": "unresolved",
+      "result": "Provider rules were not supplied. The report keeps this boundary unverified.",
+      "evidence_ids": [
+        "E4"
+      ]
+    }
+  ],
+  "open_questions": [
+    {
+      "boundary_id": "B3",
+      "question": "Who chooses refund recipients and who can change that rule?",
+      "needed_evidence": "Sanitized provider configuration and administrative/recovery authority inventory."
+    }
+  ],
+  "limitations": [
+    "This is an illustrative, deliberately incomplete system, not an audit of runnable production software.",
+    "Customer signature verification, nonce enforcement, custody implementation, service isolation, and the completeness of change/recovery paths are assumed in the pseudocode; none has been independently established.",
+    "The conclusions apply only to the stated operation and assumptions. A surviving payout restriction does not establish protection against all forms of loss."
+  ]
+}

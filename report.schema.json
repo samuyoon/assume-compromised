@@ -1,0 +1,397 @@
+{
+  "type": "object",
+  "properties": {
+    "report_version": {
+      "type": "string",
+      "enum": [
+        "1"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "properties": {
+        "operation": {
+          "type": "string",
+          "minLength": 1
+        },
+        "compromised_component": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attacker_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        },
+        "excluded_capabilities": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 0
+        },
+        "evidence_limits": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "operation",
+        "compromised_component",
+        "attacker_capabilities",
+        "excluded_capabilities",
+        "evidence_limits"
+      ],
+      "additionalProperties": false
+    },
+    "steps": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "action": {
+            "type": "string",
+            "minLength": 1
+          },
+          "actor": {
+            "type": "string",
+            "minLength": 1
+          },
+          "authority": {
+            "type": "string",
+            "minLength": 1
+          },
+          "credential_refs": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0
+          },
+          "inputs": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outputs": {
+            "type": "string",
+            "minLength": 1
+          },
+          "boundary_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+            },
+            "minItems": 0
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "id",
+          "action",
+          "actor",
+          "authority",
+          "credential_refs",
+          "inputs",
+          "outputs",
+          "boundary_ids",
+          "evidence_ids"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "boundaries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "restriction": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enforced_by": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enforcement_location": {
+            "type": "string",
+            "enum": [
+              "inside",
+              "outside",
+              "unknown"
+            ]
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "survives",
+              "defeated",
+              "unverified"
+            ]
+          },
+          "evidence_basis": {
+            "type": "string",
+            "enum": [
+              "source_only",
+              "deployment_snapshot"
+            ]
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "change_paths": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "principal": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "mechanism": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "attacker_control": {
+                  "type": "string",
+                  "enum": [
+                    "yes",
+                    "no",
+                    "unknown"
+                  ]
+                },
+                "evidence_ids": {
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+                  },
+                  "minItems": 0
+                }
+              },
+              "required": [
+                "principal",
+                "mechanism",
+                "attacker_control",
+                "evidence_ids"
+              ],
+              "additionalProperties": false
+            },
+            "minItems": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+            },
+            "minItems": 0
+          },
+          "production_checks": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            },
+            "minItems": 0
+          }
+        },
+        "required": [
+          "id",
+          "restriction",
+          "enforced_by",
+          "enforcement_location",
+          "status",
+          "evidence_basis",
+          "reason",
+          "change_paths",
+          "evidence_ids",
+          "production_checks"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "repository",
+              "deployment_snapshot",
+              "operator_attestation"
+            ]
+          },
+          "root": {
+            "type": "string",
+            "enum": [
+              "repository",
+              "artifacts"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "start_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "end_line": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$"
+          },
+          "captured_at": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "root",
+          "path",
+          "start_line",
+          "end_line",
+          "sha256",
+          "captured_at",
+          "notes"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "challenges": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "boundary_id": {
+            "type": "string",
+            "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+          },
+          "check": {
+            "type": "string",
+            "minLength": 1
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "supported",
+              "revised",
+              "unresolved"
+            ]
+          },
+          "result": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z][A-Za-z0-9_-]*$"
+            },
+            "minItems": 0
+          }
+        },
+        "required": [
+          "boundary_id",
+          "check",
+          "outcome",
+          "result",
+          "evidence_ids"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "boundary_id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "question": {
+            "type": "string",
+            "minLength": 1
+          },
+          "needed_evidence": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "required": [
+          "boundary_id",
+          "question",
+          "needed_evidence"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 0
+    },
+    "limitations": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "report_version",
+    "scope",
+    "steps",
+    "boundaries",
+    "evidence",
+    "challenges",
+    "open_questions",
+    "limitations"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Assume Compromised report"
+}

@@ -6,25 +6,37 @@ Snapshot-based investigation, not a security certification. Unreachable in the g
 
 Investigation: Waiting for specific human input
 
-| Compromise | Action | Outcome | Why |
-| --- | --- | --- | --- |
-| Public internet | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Public internet | Change allowed recipients | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Public internet | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
-| Employee deploy account | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Employee deploy account | Change allowed recipients | Attacker can reach | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Employee deploy account | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
-| Production API and its credentials | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Production API and its credentials | Change allowed recipients | Attacker can reach | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Production API and its credentials | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
-| Customer signing credential | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Customer signing credential | Change allowed recipients | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Customer signing credential | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
-| Independent settlement administrator | Approve external payout | Attacker can reach | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Independent settlement administrator | Change allowed recipients | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Independent settlement administrator | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
+## Attack paths found
 
-## Exact input needed to finish
+### Employee deploy account → Change allowed recipients
+
+Assumed starting access: Employee deploy account
+
+- Employee deploy account → API runtime control: Deploy arbitrary API code and use runtime credentials. (evidence: Elive)
+- API runtime control → Use destination admin: api grants admin (evidence: Elive)
+- Use destination admin → Change allowed recipients: admin grants destination (evidence: Elive)
+
+One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.
+
+### Production API and its credentials → Change allowed recipients
+
+Assumed starting access: API runtime control
+
+- API runtime control → Use destination admin: api grants admin (evidence: Elive)
+- Use destination admin → Change allowed recipients: admin grants destination (evidence: Elive)
+
+One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.
+
+### Independent settlement administrator → Approve external payout
+
+Assumed starting access: Independent approver
+
+- Independent approver → Control settlement enforcement: approver grants settlement (evidence: Elive)
+- Control settlement enforcement → Approve external payout: Replacement enforcement code bypasses the normal signature restriction. (evidence: Elive)
+
+One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.
+
+## Specific input required
 
 ### Q_refund: Connect read-only access to the production provider account, or export its effective refund-recipient permissions and administrator recovery settings. Do not supply secret values.
 
@@ -36,6 +48,17 @@ Already checked: Inspected the supplied repository and deployment snapshot; neit
 
 Resolves: question:Q_refund, owner:provider, edge:refund_unknown, coverage:C_external_provider, check-1:B_refund
 
+## Supporting evidence for ruled-out paths
+
+| Compromise | Action investigated | Why this path was ruled out |
+| --- | --- | --- |
+| Public internet | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Public internet | Change allowed recipients | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Employee deploy account | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Production API and its credentials | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Customer signing credential | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Customer signing credential | Change allowed recipients | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Independent settlement administrator | Change allowed recipients | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
 
 ## System coverage
 

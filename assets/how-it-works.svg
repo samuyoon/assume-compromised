@@ -42,16 +42,14 @@
 <rect x="190" y="1036" width="1120" height="620" rx="18" fill="#F0F4F0" stroke="#89AF9D" stroke-width="2"/>
 <circle cx="240.5" cy="1086.5" r="24.5" fill="#19705A"/>
 <text x="232" y="1095.9" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">5</text>
-<text x="287" y="1097.55" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#172624">Explore the compromise map</text>
+<text x="287" y="1097.55" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#172624">See the attack paths</text>
 <text x="226" y="1160.97" font-family="Arial,sans-serif" font-size="29" font-weight="400" fill="#5B6D66">Select the account or server you assume is compromised.</text>
-<rect x="226" y="1210" width="1048" height="108" rx="12" fill="white" stroke="#D4E1D8" stroke-width="2"/>
-<text x="254" y="1251.83" font-family="Arial,sans-serif" font-size="31" font-weight="700" fill="#8A442D">Attacker can reach</text>
-<text x="254" y="1295.18" font-family="Arial,sans-serif" font-size="26" font-weight="400" fill="#5B6D66">The data, services, and actions available through that access.</text>
-<rect x="226" y="1335" width="1048" height="108" rx="12" fill="white" stroke="#D4E1D8" stroke-width="2"/>
-<text x="254" y="1376.83" font-family="Arial,sans-serif" font-size="31" font-weight="700" fill="#19705A">Still protected</text>
-<text x="254" y="1420.18" font-family="Arial,sans-serif" font-size="26" font-weight="400" fill="#5B6D66">Actions that require authority the attacker has not obtained.</text>
-<rect x="226" y="1460" width="1048" height="108" rx="12" fill="white" stroke="#D4E1D8" stroke-width="2"/>
-<text x="254" y="1501.83" font-family="Arial,sans-serif" font-size="31" font-weight="700" fill="#87631E">Waiting for your input</text>
-<text x="254" y="1545.18" font-family="Arial,sans-serif" font-size="26" font-weight="400" fill="#5B6D66">Exact request, e.g. read-only access to provider policy settings.</text>
-<text x="226" y="1625.11" font-family="Arial,sans-serif" font-size="27" font-weight="700" fill="#172624">Pending only when a human must supply information or access.</text>
+<rect x="226" y="1210" width="1048" height="130" rx="12" fill="white" stroke="#D4E1D8" stroke-width="2"/>
+<text x="254" y="1253.83" font-family="Arial,sans-serif" font-size="31" font-weight="700" fill="#8A442D">Attack paths found</text>
+<text x="254" y="1298.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">Starting access → permissions gained → money, data, or systems reached.</text>
+<rect x="226" y="1370" width="1048" height="130" rx="12" fill="white" stroke="#D4E1D8" stroke-width="2"/>
+<text x="254" y="1413.83" font-family="Arial,sans-serif" font-size="31" font-weight="700" fill="#87631E">Specific input required</text>
+<text x="254" y="1458.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">The exact fact or access only a human can supply to verify a suspected path.</text>
+<text x="226" y="1571.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">If the completed review finds none:</text>
+<text x="226" y="1616.97" font-family="Arial,sans-serif" font-size="29" font-weight="700" fill="#172624">“No attack paths found within the reviewed scope.”</text>
 </svg>

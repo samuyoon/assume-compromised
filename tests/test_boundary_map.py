@@ -42,8 +42,52 @@ class GraphTests(unittest.TestCase):
         self.assertEqual(['Q_refund'], [q['question_id'] for q in refund['human_requests']])
         self.assertIn('read-only', refund['human_requests'][0]['request'])
         output = bm.render(self.report)
-        self.assertIn('Waiting for your input', output)
-        self.assertIn('Exact input needed to finish', output)
+        self.assertIn('Specific input required', output)
+        self.assertIn('Connect read-only access', output)
+
+    def test_attack_path_includes_indirect_steps_and_evidence(self):
+        scenario = next(s for s in self.report['scenarios'] if s['id'] == 'S_employee')
+        paths = bm.assess(self.report, scenario)['attack_paths']
+        path = next(p for p in paths if p['action_id'] == 'destination')
+        self.assertEqual(['employee'], path['initial_control'])
+        self.assertEqual(['deploy', 'api_admin', 'replace_allowlist'], [e['id'] for e in path['steps']])
+        self.assertTrue(all(e['basis'] == 'observed' and e['evidence_ids'] for e in path['steps']))
+        self.assertNotIn('refund', {p['action_id'] for p in paths})
+
+    def test_attack_path_preserves_all_and_prerequisites(self):
+        scenario = next(s for s in self.report['scenarios'] if s['id'] == 'S_runtime')
+        scenario['initial_control'].append('customer_key')
+        path = next(p for p in bm.assess(self.report, scenario)['attack_paths'] if p['action_id'] == 'payout')
+        self.assertEqual(['api', 'customer_key'], path['initial_control'])
+        self.assertEqual(['api_ops', 'sign_payout'], [e['id'] for e in path['steps']])
+        self.assertEqual(['ops', 'customer_key'], path['steps'][-1]['requires_all'])
+        self.assertIn('API runtime control AND Use operations signer AND Use customer signing key', bm.render(self.report))
+
+    def test_headline_outputs_are_findings_and_input_with_supporting_ruleouts(self):
+        output = bm.render(self.report)
+        self.assertIn('## Attack paths found', output)
+        self.assertIn('## Specific input required', output)
+        self.assertNotIn('Still protected', output)
+        self.assertNotIn('| Outcome |', output)
+        supporting = output.index('## Supporting evidence for ruled-out paths')
+        self.assertGreater(supporting, output.index('## Specific input required'))
+        self.assertIn('Approve external payout', output[supporting:])
+
+    def test_no_findings_does_not_imply_complete_while_input_is_missing(self):
+        self.report['scenarios'] = [self.report['scenarios'][0]]
+        output = bm.render(self.report)
+        self.assertIn('Specific input is still required', output)
+        self.assertNotIn('No attack paths found within the reviewed scope.', output)
+
+    def test_complete_empty_result_is_scoped_and_not_a_safety_claim(self):
+        self.report['questions'] = []
+        self.report['scenarios'] = [self.report['scenarios'][0]]
+        next(n for n in self.report['nodes'] if n['id'] == 'provider')['owner_ids'] = ['company']
+        next(e for e in self.report['edges'] if e['id'] == 'refund_unknown').update(basis='observed', evidence_ids=['Elive'])
+        self.report['boundaries'][2]['remaining_checks'] = []
+        self.report['coverage'][-1]['status'] = 'inspected'
+        self.assertEqual([], self.errors())
+        self.assertIn('No attack paths found within the reviewed scope.', bm.render(self.report))
 
     def test_generic_unknown_cannot_be_delivered_in_either_format(self):
         del self.report['questions'][0]['human_blocker']

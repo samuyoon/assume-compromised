@@ -16,8 +16,6 @@ import sys
 
 ROOT = Path(__file__).resolve().parent
 KINDS = ['principal', 'credential', 'service', 'control', 'resource', 'action']
-OUTCOME_LABELS = {'survives': 'Still protected', 'defeated': 'Attacker can reach',
-                  'unverified': 'Waiting for your input'}
 SKIP = {'.git', 'node_modules', '.venv', 'venv', '__pycache__', 'dist', 'build', '.next', 'vendor', '.terraform'}
 EXTENSIONS = {'.py', '.js', '.ts', '.tsx', '.jsx', '.go', '.rs', '.sol', '.tf', '.yaml', '.yml', '.json', '.toml', '.md', '.sh', '.dockerfile'}
 ENV = re.compile(r'''(?:process\.env\.([A-Z][A-Z0-9_]*)|(?:getenv|environ\.get)\(\s*["']([A-Z][A-Z0-9_]*)["']|(?:process\.env|os\.environ)\[\s*["']([A-Z][A-Z0-9_]*)["'])''')
@@ -268,7 +266,35 @@ def assess(report, scenario):
                 issues = ['The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage.']
         results.append(dict(boundary_id=b['id'], action_id=action, status=status, reasons=issues,
                             gaps=gaps, human_requests=[]))
-    return dict(id=scenario['id'], known=sorted(known), possible=sorted(possible), paths=paths, results=results)
+    reachable_actions = dict.fromkeys(r['action_id'] for r in results if r['status'] == 'defeated')
+    attack_paths = [attack_path(report, scenario, action_id, paths) for action_id in reachable_actions]
+    return dict(id=scenario['id'], known=sorted(known), possible=sorted(possible), paths=paths,
+                results=results, attack_paths=attack_paths)
+
+
+def attack_path(report, scenario, action_id, paths):
+    """One observed proof per reachable action, retaining every AND prerequisite.
+
+    `reachable` records the first establishing grant, so this is a proof DAG rather
+    than a claim to enumerate every alternative attack path in the system.
+    """
+    edges = {e['id']: e for e in report['edges']}
+    initial, seen, steps = set(), set(), []
+
+    def visit(nid):
+        if nid in seen:
+            return
+        seen.add(nid)
+        if nid in scenario['initial_control']:
+            initial.add(nid)
+            return
+        edge = edges[paths[nid]]
+        for parent in [edge['source'], *edge['requires_all']]:
+            visit(parent)
+        steps.append(dict(edge))
+
+    visit(action_id)
+    return dict(action_id=action_id, initial_control=sorted(initial), steps=steps)
 
 
 def delivery_state(report):
@@ -399,19 +425,41 @@ def render(report):
     out = ['# Security Boundary Mapping', '', report['system']['name'], '',
            'Snapshot-based investigation, not a security certification. Unreachable in the graph does not prove impossible in the system.', '',
            'Investigation: ' + ('Waiting for specific human input' if state['status'] == 'awaiting_human' else 'Review complete within the declared scope'), '',
-           '| Compromise | Action | Outcome | Why |', '| --- | --- | --- | --- |']
+           '## Attack paths found', '']
+    found = False
     for s, a in zip(report['scenarios'], assessments):
-        for r in a['results']:
-            vals = [s['label'], nodes[r['action_id']]['label'], OUTCOME_LABELS[r['status']], ' '.join(r['reasons'])]
-            out.append('| ' + ' | '.join(escape(v).replace('|', '\\|') for v in vals) + ' |')
+        for path in a['attack_paths']:
+            found = True
+            out += [f'### {escape(s["label"])} → {escape(nodes[path["action_id"]]["label"])}', '',
+                    'Assumed starting access: ' + escape(', '.join(nodes[n]['label'] for n in path['initial_control'])), '']
+            if not path['steps']:
+                out += ['The action is already included in the assumed starting access; no additional grant is needed.', '']
+            for step in path['steps']:
+                required = [step['source'], *step['requires_all']]
+                out += ['- ' + escape(' AND '.join(nodes[n]['label'] for n in required)) + ' → ' +
+                        escape(nodes[step['target']]['label']) + ': ' + escape(step['description']) +
+                        ' (evidence: ' + escape(', '.join(step['evidence_ids'])) + ')']
+            out += ['', 'One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.', '']
+    if not found:
+        out += [('No attack paths found within the reviewed scope.' if state['status'] == 'complete' else
+                 'No attack paths established yet. Specific input is still required to finish the investigation.'), '']
+    out += ['## Specific input required', '']
     if state['requests']:
-        out += ['', '## Exact input needed to finish', '']
         for h in state['requests']:
             out += [f'### {h["question_id"]}: {h["request"]}', '',
                     'Requested from: ' + escape(h['requested_from']), '',
                     'Why the agent cannot obtain it: ' + escape(h['why_agent_cannot_resolve']), '',
                     'Already checked: ' + escape('; '.join(h['attempted_checks'])), '',
                     'Resolves: ' + escape(', '.join(h['gap_ids'])), '']
+    else:
+        out += ['No outstanding human requests.', '']
+    out += ['## Supporting evidence for ruled-out paths', '',
+            '| Compromise | Action investigated | Why this path was ruled out |', '| --- | --- | --- |']
+    for s, a in zip(report['scenarios'], assessments):
+        for r in a['results']:
+            if r['status'] == 'survives':
+                vals = [s['label'], nodes[r['action_id']]['label'], ' '.join(r['reasons'])]
+                out.append('| ' + ' | '.join(escape(v).replace('|', '\\|') for v in vals) + ' |')
     for title, key in [('System coverage', 'coverage'), ('Clarifications', 'questions'), ('Authority inventory', 'nodes'), ('Evidence', 'evidence')]:
         out += ['', '## ' + title, '', '```json', json.dumps(report[key], indent=2), '```']
     return '\n'.join(out) + '\n'
@@ -420,8 +468,7 @@ def render(report):
 def render_html(report):
     state = deliverable(report)
     data = json.dumps(dict(report=report, assessments=state['assessments'],
-                          investigation_status=state['status'], human_requests=state['requests'],
-                          outcome_labels=OUTCOME_LABELS)).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+                          investigation_status=state['status'], human_requests=state['requests'])).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     template = (ROOT / 'viewer.html').read_text(encoding='utf-8')
     return template.replace('/*REPORT_DATA*/null', data)
 

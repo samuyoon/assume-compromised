@@ -1,12 +1,12 @@
 # Security Boundary Mapping
 
-![Security Boundary Mapping: map your system and see what survives a compromise.](assets/social-preview.jpg)
+![Security Boundary Mapping: investigate the damage a compromise could cause.](assets/social-preview.jpg)
 
-**Map what an attacker can do after each part of your system is compromised, and which protections still hold.**
+**Find the attack paths an intruder could use after compromising part of your system.**
 
 A model-independent investigation workflow for your coding agent, backed by a dependency-free Python tool. Starts with the entire application: repositories, deployed workloads, credentials, deployment rights, administrators, recovery mechanisms, external providers and consequential operations. You do not need to pick a money route first.
 
-The result is a private, offline interactive authority map, a compromise matrix, and a deployment/credential inventory. Select a compromise scenario to see what an attacker can reach and what remains protected. The agent keeps investigating until it can support each conclusion or identify specific information or access only a human can supply.
+The result is a private, offline interactive map of attack paths and a deployment/credential inventory. Select a compromise scenario to see how the attacker's starting access can lead to consequential actions, including indirect grants and multi-party prerequisites. The main outputs are **attack paths found** and **specific input required** to finish establishing a suspected path. The agent keeps investigating everything it can resolve itself.
 
 ## Start one investigation
 
@@ -66,11 +66,11 @@ python3 boundary_map.py evidence --root /path/to/private/security-review \
 
 ## Interpreting the result
 
-| Outcome | Meaning within the reviewed model and snapshot |
-| --- | --- |
-| **Still protected** | The action still requires authority outside this compromise; relevant review, ownership, coverage and deployment checks are resolved. |
-| **Attacker can reach** | Observed grants reach the action, including through indirect administrative or recovery authority. This is not automatically a confirmed exploit. |
-| **Waiting for your input** | A specific fact or access grant only a human can supply is needed. The map names the request, who can provide it, the checks already attempted, and the affected conclusions. This is a pending conclusion, not a completed assessment. |
+**Attack paths found** show the assumed starting compromise, each observed grant along a path, all additional prerequisites, the reachable action, and its evidence. The tool supplies one establishing path per reachable action and scenario; the authority graph retains alternatives. An authority path is not automatically a demonstrated exploit.
+
+**Specific input required** names the exact missing fact or read-only access, who can provide it, why available tools cannot obtain it, the checks already attempted, and the conclusions it affects. This is a request to finish the investigation, not a finding of safety or a generic task handed back to the user.
+
+If a completed investigation finds no path, it says **No attack paths found within the reviewed scope.** If input is still missing, it explicitly says the investigation is pending. Explanations of ruled-out paths remain in supporting evidence, collapsed by default in the viewer; they are not a separate headline outcome.
 
 The CLI rejects report delivery when agent-resolvable work remains. Uncertain paths stay `unverified` internally; they never become protected just because the agent cannot inspect them. `validate` lists exact gap IDs to resolve. An open question needs a structured `human_blocker` covering each relevant gap before it can appear in a delivered map. Unfinished challenge passes, unreviewed scenario assumptions, and missing modeled bypass paths cannot be excused with a human blocker. Continue independent work while waiting; resume the affected checks when the requested information arrives.
 
@@ -80,7 +80,7 @@ Keep outputs outside public repositories. Authority maps and metadata can themse
 
 ## Example and implementation
 
-![Example compromise matrix showing reachable authority, remaining protections, and an exact human request.](assets/example-preview.png)
+![Example attack path and a specific request for missing provider access.](assets/example-preview.png)
 
 - [Interactive fictional example](examples/fictional-payments/map.html) — download and open locally.
 - [Markdown example](examples/fictional-payments/REPORT.md).

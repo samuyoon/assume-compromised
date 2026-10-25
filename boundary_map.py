@@ -164,10 +164,17 @@ def validate(report, report_path, roots):
         if not any(evidence.get(e, {}).get('kind') == 'deployment' for e in b['evidence_ids']) and not b['remaining_checks']:
             errors.append(f'{b["id"]}: source-only boundary needs remaining deployment checks')
     for q in report['questions']:
-        refs(q['affects'], {**nodes, **collections['boundaries'], **collections['coverage'], **collections['scenarios']}, q['id'])
+        refs(q['affects'], {**nodes, **edges, **collections['boundaries'], **collections['coverage'], **collections['scenarios']}, q['id'])
         refs(q['evidence_ids'], evidence, q['id'])
         if q['status'] == 'resolved' and (not q['answer'].strip() or not q['evidence_ids']):
             errors.append(f'{q["id"]}: resolution needs an answer and corroborating evidence')
+        if 'human_blocker' in q:
+            try:
+                stamp = datetime.fromisoformat(q['human_blocker']['asked_at'].replace('Z', '+00:00'))
+                if stamp.tzinfo is None:
+                    raise ValueError('timezone required')
+            except ValueError:
+                errors.append(f'{q["id"]}: human request needs an asked_at timestamp with timezone')
     # Environment discovery itself must be explicitly accounted for.
     for action in nodes.values():
         if action['kind'] == 'action' and not any(b['action_id'] == action['id'] for b in report['boundaries']):
@@ -178,7 +185,7 @@ def validate(report, report_path, roots):
             errors.append(f'{env}: missing coverage categories: ' + ', '.join(sorted(missing)))
         if not any(c['environment'] == env and c['category'] == 'system_inventory' for c in report['coverage']):
             errors.append(f'{env}: missing system_inventory coverage')
-    return errors
+    return errors or delivery_errors(report)
 
 
 def reachable(report, scenario, possible=False):
@@ -201,7 +208,6 @@ def assess(report, scenario):
     coverage = {c['id']: c for c in report['coverage']}
     evidence = {e['id']: e for e in report['evidence']}
     nodes = {n['id']: n for n in report['nodes']}
-    edges = {e['id']: e for e in report['edges']}
     results = []
     for b in report['boundaries']:
         action = b['action_id']
@@ -218,38 +224,156 @@ def assess(report, scenario):
         scope_coverage = set(b['coverage_ids']) | {c['id'] for c in report['coverage']
                           if c['category'] == 'system_inventory' and c['environment'] in
                           {nodes[action]['environment'], 'shared'}}
-        affected = relevant | scope_coverage | {b['id'], scenario['id']}
+        affected = relevant | scope_coverage | {b['id'], scenario['id']} | {
+            e['id'] for e in report['edges'] if e['target'] in relevant}
         unknowns = [q['id'] for q in report['questions'] if q['status'] != 'resolved' and set(q['affects']) & affected]
         incomplete = [c for c in sorted(scope_coverage) if coverage[c]['status'] != 'inspected']
         owner_gaps = [nid for nid in sorted(relevant) if nodes[nid]['kind'] in {'credential', 'control'} and not nodes[nid]['owner_ids']]
-        issues = []
+        issues, gaps = [], []
+
+        def gap(kind, target, description, human_eligible=True):
+            item = dict(id=f'{kind}:{target}', target=target, kind=kind,
+                        description=description, human_eligible=human_eligible)
+            if item['id'] not in {g['id'] for g in gaps}:
+                gaps.append(item)
+                issues.append(description)
+
         if action in known:
             status = 'defeated'
             issues = ['A modeled authority path reaches this action. Follow the graph edges for the prerequisites.']
         else:
-            if action in possible:
-                issues.append('An unresolved authority grant could reach this action.')
-            if b['enforcer_id'] in possible:
-                issues.append('The enforcer itself may be controlled; enumerate the resulting bypass.')
-            if unknowns:
-                issues.append('Unresolved clarifications: ' + ', '.join(unknowns))
-            if incomplete:
-                issues.append('Incomplete coverage: ' + ', '.join(incomplete))
-            if owner_gaps:
-                issues.append('Unresolved credential/control owners: ' + ', '.join(owner_gaps))
-            if b['challenge'] != 'supported' or b['remaining_checks']:
-                issues.append('Challenge or deployment checks remain incomplete.')
+            for e in report['edges']:
+                if e['target'] in relevant and e['basis'] != 'observed':
+                    gap('edge', e['id'], f'{e["id"]}: inspect the effective deployed grant ({e["description"]}).')
+            if b['enforcer_id'] in known:
+                gap('enforcer', b['id'], 'The enforcer is controlled; enumerate and assess its bypass paths.', False)
+            for qid in unknowns:
+                gap('question', qid, f'{qid}: reconcile the clarification and its evidence.')
+            for cid in incomplete:
+                gap('coverage', cid, f'{cid}: complete the {coverage[cid]["subject"]} inspection.')
+            for nid in owner_gaps:
+                gap('owner', nid, f'{nid}: establish who controls and recovers this authority.')
+            if b['challenge'] != 'supported':
+                gap('challenge', b['id'], 'Finish the challenge pass using all available evidence.', False)
+            for i, check in enumerate(b['remaining_checks']):
+                gap(f'check-{i + 1}', b['id'], check)
             if not any(evidence.get(e, {}).get('kind') == 'deployment' for e in b['evidence_ids']):
-                issues.append('Enforcement has source evidence only.')
-            if any(edges[g]['basis'] != 'observed' for g in b['gate_ids']):
-                issues.append('Action paths are not all deployment-observed.')
+                gap('deployment', b['id'], 'Obtain observed deployment evidence for enforcement.')
             if scenario['review'] != 'supported':
-                issues.append('Initial compromise assumptions need review.')
+                gap('scenario', scenario['id'], 'Review the initial compromise assumptions.', False)
             status = 'unverified' if issues else 'survives'
             if status == 'survives':
                 issues = ['The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage.']
-        results.append(dict(boundary_id=b['id'], action_id=action, status=status, reasons=issues))
-    return dict(id=scenario['id'], known=sorted(known), possible=sorted(possible), paths=paths, results=results)
+        results.append(dict(boundary_id=b['id'], action_id=action, status=status, reasons=issues,
+                            gaps=gaps, human_requests=[]))
+    reachable_actions = dict.fromkeys(r['action_id'] for r in results if r['status'] == 'defeated')
+    attack_paths = [attack_path(report, scenario, action_id, paths) for action_id in reachable_actions]
+    return dict(id=scenario['id'], known=sorted(known), possible=sorted(possible), paths=paths,
+                results=results, attack_paths=attack_paths)
+
+
+def attack_path(report, scenario, action_id, paths):
+    """One observed proof per reachable action, retaining every AND prerequisite.
+
+    `reachable` records the first establishing grant, so this is a proof DAG rather
+    than a claim to enumerate every alternative attack path in the system.
+    """
+    edges = {e['id']: e for e in report['edges']}
+    initial, seen, steps = set(), set(), []
+
+    def visit(nid):
+        if nid in seen:
+            return
+        seen.add(nid)
+        if nid in scenario['initial_control']:
+            initial.add(nid)
+            return
+        edge = edges[paths[nid]]
+        for parent in [edge['source'], *edge['requires_all']]:
+            visit(parent)
+        steps.append(dict(edge))
+
+    visit(action_id)
+    return dict(action_id=action_id, initial_control=sorted(initial), steps=steps)
+
+
+def delivery_state(report):
+    """Uncertainty is evidence state, never permission to stop investigating.
+
+    Delivery requires every gap to have an explicit, already-asked human dependency.
+    The host agent must establish that its recorded attempts exhausted available tools;
+    Python validates the record and links, not the truth of that assertion.
+    """
+    assessments = [assess(report, s) for s in report['scenarios']]
+    gaps = {g['id']: g for a in assessments for r in a['results'] for g in r['gaps']}
+    # Also account for unfinished work even when a demonstrated path already defeats
+    # every affected boundary. A proven bypass must not hide unrelated review gaps.
+    def add(kind, target, description, human_eligible=True):
+        key = f'{kind}:{target}'
+        gaps.setdefault(key, dict(id=key, target=target, kind=kind,
+                                 description=description, human_eligible=human_eligible))
+    for q in report['questions']:
+        if q['status'] != 'resolved':
+            add('question', q['id'], q['question'])
+    for c in report['coverage']:
+        if c['status'] not in {'inspected', 'excluded'}:
+            add('coverage', c['id'], f'Complete {c["subject"]}.')
+    for n in report['nodes']:
+        if n['kind'] in {'credential', 'control'} and not n['owner_ids']:
+            add('owner', n['id'], f'Establish ownership and recovery of {n["label"]}.')
+    for e in report['edges']:
+        if e['basis'] != 'observed':
+            add('edge', e['id'], f'Inspect effective grant {e["id"]}.')
+    for s in report['scenarios']:
+        if s['review'] != 'supported':
+            add('scenario', s['id'], 'Review initial compromise assumptions.', False)
+    for b in report['boundaries']:
+        if b['challenge'] != 'supported':
+            add('challenge', b['id'], 'Finish the challenge pass.', False)
+        for i, check in enumerate(b['remaining_checks']):
+            add(f'check-{i + 1}', b['id'], check)
+    requests, errors, by_gap = [], [], {}
+    for q in report['questions']:
+        h = q.get('human_blocker')
+        if not h or q['status'] == 'resolved':
+            continue
+        if q['status'] != 'open':
+            errors.append(f'{q["id"]}: answer already supplied; reconcile it before delivery')
+            continue
+        if f'question:{q["id"]}' not in h['gap_ids']:
+            errors.append(f'{q["id"]}: request must cover its own question gap')
+        for gid in h['gap_ids']:
+            g = gaps.get(gid)
+            if not g:
+                errors.append(f'{q["id"]}: human request references unknown or resolved gap {gid}')
+            elif not g['human_eligible']:
+                errors.append(f'{gid}: agent work cannot be delegated to a human blocker')
+            elif g['target'] != q['id'] and g['target'] not in q['affects']:
+                errors.append(f'{q["id"]}: request does not affect target of {gid}')
+            else:
+                by_gap.setdefault(gid, []).append(q['id'])
+        requests.append(dict(question_id=q['id'], question=q['question'], **h))
+    for gid, g in gaps.items():
+        if gid not in by_gap:
+            errors.append(f'Agent work remains [{gid}]: {g["description"]} '
+                          'Continue investigating; only a specific human-only information/access request may block delivery.')
+    for a in assessments:
+        for r in a['results']:
+            ids = {qid for g in r['gaps'] for qid in by_gap.get(g['id'], [])}
+            r['human_requests'] = [h for h in requests if h['question_id'] in ids]
+    return dict(status='investigating' if errors else 'awaiting_human' if gaps else 'complete',
+                errors=errors, requests=requests, assessments=assessments)
+
+
+def delivery_errors(report):
+    return delivery_state(report)['errors']
+
+
+def deliverable(report):
+    state = delivery_state(report)
+    if state['errors']:
+        raise ReportError('\n'.join(state['errors']))
+    return state
 
 
 def discover(roots, max_files=20000):
@@ -295,22 +419,56 @@ def escape(s):
 
 
 def render(report):
-    assessments = [assess(report, s) for s in report['scenarios']]
+    state = deliverable(report)
+    assessments = state['assessments']
     nodes = {n['id']: n for n in report['nodes']}
     out = ['# Security Boundary Mapping', '', report['system']['name'], '',
            'Snapshot-based investigation, not a security certification. Unreachable in the graph does not prove impossible in the system.', '',
-           '| Compromise | Action | Outcome | Why |', '| --- | --- | --- | --- |']
+           'Investigation: ' + ('Waiting for specific human input' if state['status'] == 'awaiting_human' else 'Review complete within the declared scope'), '',
+           '## Attack paths found', '']
+    found = False
+    for s, a in zip(report['scenarios'], assessments):
+        for path in a['attack_paths']:
+            found = True
+            out += [f'### {escape(s["label"])} → {escape(nodes[path["action_id"]]["label"])}', '',
+                    'Assumed starting access: ' + escape(', '.join(nodes[n]['label'] for n in path['initial_control'])), '']
+            if not path['steps']:
+                out += ['The action is already included in the assumed starting access; no additional grant is needed.', '']
+            for step in path['steps']:
+                required = [step['source'], *step['requires_all']]
+                out += ['- ' + escape(' AND '.join(nodes[n]['label'] for n in required)) + ' → ' +
+                        escape(nodes[step['target']]['label']) + ': ' + escape(step['description']) +
+                        ' (evidence: ' + escape(', '.join(step['evidence_ids'])) + ')']
+            out += ['', 'One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.', '']
+    if not found:
+        out += [('No attack paths found within the reviewed scope.' if state['status'] == 'complete' else
+                 'No attack paths established yet. Specific input is still required to finish the investigation.'), '']
+    out += ['## Specific input required', '']
+    if state['requests']:
+        for h in state['requests']:
+            out += [f'### {h["question_id"]}: {h["request"]}', '',
+                    'Requested from: ' + escape(h['requested_from']), '',
+                    'Why the agent cannot obtain it: ' + escape(h['why_agent_cannot_resolve']), '',
+                    'Already checked: ' + escape('; '.join(h['attempted_checks'])), '',
+                    'Resolves: ' + escape(', '.join(h['gap_ids'])), '']
+    else:
+        out += ['No outstanding human requests.', '']
+    out += ['## Supporting evidence for ruled-out paths', '',
+            '| Compromise | Action investigated | Why this path was ruled out |', '| --- | --- | --- |']
     for s, a in zip(report['scenarios'], assessments):
         for r in a['results']:
-            vals = [s['label'], nodes[r['action_id']]['label'], r['status'], ' '.join(r['reasons'])]
-            out.append('| ' + ' | '.join(escape(v).replace('|', '\\|') for v in vals) + ' |')
+            if r['status'] == 'survives':
+                vals = [s['label'], nodes[r['action_id']]['label'], ' '.join(r['reasons'])]
+                out.append('| ' + ' | '.join(escape(v).replace('|', '\\|') for v in vals) + ' |')
     for title, key in [('System coverage', 'coverage'), ('Clarifications', 'questions'), ('Authority inventory', 'nodes'), ('Evidence', 'evidence')]:
         out += ['', '## ' + title, '', '```json', json.dumps(report[key], indent=2), '```']
     return '\n'.join(out) + '\n'
 
 
 def render_html(report):
-    data = json.dumps(dict(report=report, assessments=[assess(report, s) for s in report['scenarios']])).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    state = deliverable(report)
+    data = json.dumps(dict(report=report, assessments=state['assessments'],
+                          investigation_status=state['status'], human_requests=state['requests'])).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
     template = (ROOT / 'viewer.html').read_text(encoding='utf-8')
     return template.replace('/*REPORT_DATA*/null', data)
 
@@ -391,6 +549,8 @@ def main(argv=None):
                     print('Answer recorded as an operator statement. Agent reconciliation and evidence are still required.'); return 0
                 if args.command == 'questions' and question['status'] != 'resolved':
                     print(f'{question["id"]} [{question["status"]}]: {question["question"]}\n  Needed: {question["needed_evidence"]}\n  Answer: {question["answer"]}')
+                    if question.get('human_blocker'):
+                        print('  Human request: ' + json.dumps(question['human_blocker'], ensure_ascii=False))
             if args.command == 'answer':
                 raise ReportError('Unknown question ID')
             return 0
@@ -400,6 +560,8 @@ def main(argv=None):
         if args.command == 'render':
             with Path(args.out).open('x', encoding='utf-8') as f:
                 f.write(render_html(report) if args.format == 'html' else render(report))
+        state = delivery_state(report)
+        print('Waiting for specific human input.' if state['status'] == 'awaiting_human' else 'Review complete within the declared scope.')
         print('Report evidence and structure checked. Conclusions remain limited to the reviewed model and snapshot.')
         return 0
     except (OSError, ValueError, KeyError, UnicodeError) as exc:

@@ -30,6 +30,30 @@ Inventory every discovered environment. For each environment record system inven
 
 Repository root IDs map to paths in private `workspace.json`; `artifacts` means the review folder. Evidence references relative files, inclusive line ranges, SHA-256 hashes, original capture timestamps with timezone, and provenance. The CLI checks paths, hashes, ranges and metadata, not snapshot authenticity or reasoning. Never store raw credentials or production reports in this public repository.
 
-Questions identify affected IDs and the evidence needed. The host agent must ASK during the investigation. `answer` saves an operator statement with status `answered`; it does not mark the fact verified or change graph grants. Reconcile the statement against evidence, update the graph, then use `resolved` with evidence references. Operator attestation alone must not establish observed grants or independent deployed enforcement. Questions may remain unresolved in a valid, useful report.
+Questions identify affected node, edge, boundary, coverage or scenario IDs and the evidence needed. The host agent first investigates with its available authorized tools, then must ASK for any missing fact/access only a human can supply. `answer` saves an operator statement with status `answered`; it does not mark the fact verified or change graph grants. Reconcile the statement against evidence, update the graph, then use `resolved` with evidence references. Operator attestation alone must not establish observed grants or independent deployed enforcement.
 
-`validate` checks the artifact; `render` produces an offline interactive HTML map by default or Markdown with `--format md`. Re-run both after answers, changed evidence, or changed deployments. There is no continuous monitoring and no automatic cloud authentication in the Python package.
+## Completion and human dependencies
+
+`unverified` remains an internal evidence state. It is not permission to finish with generic uncertainty. `validate` and both renderers reject agent-resolvable gaps. `delivery_state()` returns `investigating` while such work remains, `awaiting_human` when every remaining gap has a qualifying human request, and `complete` when all declared review work is resolved. These describe the investigation, not certification of the target system.
+
+An open question may have `human_blocker` with these required fields:
+
+- `kind`: `information` or `access`.
+- `requested_from`: the person or role able to supply it.
+- `request`: the exact missing fact or scoped read-only access/export, never secret values.
+- `why_agent_cannot_resolve`: why the currently authorized tools and available evidence cannot answer it.
+- `attempted_checks`: nonempty list of specific checks already made and their results.
+- `asked_at`: original timestamp with timezone of the actual request to the user.
+- `gap_ids`: the exact gaps this request resolves, including `question:QUESTION_ID` itself.
+
+Diagnostics expose stable gap IDs: `edge:ID`, `owner:ID`, `coverage:ID`, `question:ID`, `deployment:BOUNDARY_ID`, `check-N:BOUNDARY_ID`, `challenge:BOUNDARY_ID`, `scenario:ID`, and `enforcer:BOUNDARY_ID`. The last three are agent-only work and cannot be covered by human blockers. Complete available review work and enumerate modeled bypasses; keep inaccessible facts as separate evidence dependencies. Other gaps may be blocked only by a request whose `affects` includes their target ID. A single request may cover several facts from the same missing provider export, but cannot waive unrelated gaps. `answered` questions cannot justify waiting: the agent must reconcile them or ask a new specific request.
+
+Python checks required records, timestamps, references, gap coverage and delivery eligibility. It cannot prove the agent truly exhausted its tools or that a recorded human request was actually sent. The host agent is responsible for those claims. Do not fabricate them to get a passing result.
+
+## Reader-facing output
+
+The main outputs are **Attack paths found** and **Specific input required**. For each reachable action/scenario, the analyzer reconstructs one establishing path through observed grants. It lists the assumed starting authority, ordered grant steps, evidence IDs, and every AND prerequisite. This is a proof of modeled reachability, not a linear chain that drops independent approvals, a demonstrated exploit, or an exhaustive enumeration of alternative paths. If the action is already part of the initial compromise, that assumption is stated explicitly.
+
+Missing-input requests include their affected conclusions and completed checks. They remain visible even if a different path is already established. A completed review with no path says **No attack paths found within the reviewed scope.** When input remains missing, the output says the investigation is pending and does not present that completion message. `survives` stays internal; its reasoning is supporting evidence for ruled-out paths, collapsed by default in HTML. All graph, coverage, ownership, and evidence checks still apply.
+
+`validate` checks evidence, structure and delivery eligibility; `render` applies the same completion gate and produces an offline interactive HTML map by default or Markdown with `--format md`. Re-run both after answers, changed evidence, or changed deployments. There is no continuous monitoring and no automatic cloud authentication in the Python package.

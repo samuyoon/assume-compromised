@@ -34,6 +34,130 @@ class GraphTests(unittest.TestCase):
         self.assertEqual('defeated', self.result(boundary='B_dest')['status'])
         self.assertEqual('unverified', self.result(boundary='B_refund')['status'])
 
+    def test_pending_result_has_exact_human_request(self):
+        state = bm.delivery_state(self.report)
+        self.assertEqual('awaiting_human', state['status'])
+        result = next(a for a in state['assessments'] if a['id'] == 'S_runtime')
+        refund = next(r for r in result['results'] if r['boundary_id'] == 'B_refund')
+        self.assertEqual(['Q_refund'], [q['question_id'] for q in refund['human_requests']])
+        self.assertIn('read-only', refund['human_requests'][0]['request'])
+        output = bm.render(self.report)
+        self.assertIn('Specific input required', output)
+        self.assertIn('Connect read-only access', output)
+
+    def test_attack_path_includes_indirect_steps_and_evidence(self):
+        scenario = next(s for s in self.report['scenarios'] if s['id'] == 'S_employee')
+        paths = bm.assess(self.report, scenario)['attack_paths']
+        path = next(p for p in paths if p['action_id'] == 'destination')
+        self.assertEqual(['employee'], path['initial_control'])
+        self.assertEqual(['deploy', 'api_admin', 'replace_allowlist'], [e['id'] for e in path['steps']])
+        self.assertTrue(all(e['basis'] == 'observed' and e['evidence_ids'] for e in path['steps']))
+        self.assertNotIn('refund', {p['action_id'] for p in paths})
+
+    def test_attack_path_preserves_all_and_prerequisites(self):
+        scenario = next(s for s in self.report['scenarios'] if s['id'] == 'S_runtime')
+        scenario['initial_control'].append('customer_key')
+        path = next(p for p in bm.assess(self.report, scenario)['attack_paths'] if p['action_id'] == 'payout')
+        self.assertEqual(['api', 'customer_key'], path['initial_control'])
+        self.assertEqual(['api_ops', 'sign_payout'], [e['id'] for e in path['steps']])
+        self.assertEqual(['ops', 'customer_key'], path['steps'][-1]['requires_all'])
+        self.assertIn('API runtime control AND Use operations signer AND Use customer signing key', bm.render(self.report))
+
+    def test_headline_outputs_are_findings_and_input_with_supporting_ruleouts(self):
+        output = bm.render(self.report)
+        self.assertIn('## Attack paths found', output)
+        self.assertIn('## Specific input required', output)
+        self.assertNotIn('Still protected', output)
+        self.assertNotIn('| Outcome |', output)
+        supporting = output.index('## Supporting evidence for ruled-out paths')
+        self.assertGreater(supporting, output.index('## Specific input required'))
+        self.assertIn('Approve external payout', output[supporting:])
+
+    def test_no_findings_does_not_imply_complete_while_input_is_missing(self):
+        self.report['scenarios'] = [self.report['scenarios'][0]]
+        output = bm.render(self.report)
+        self.assertIn('Specific input is still required', output)
+        self.assertNotIn('No attack paths found within the reviewed scope.', output)
+
+    def test_complete_empty_result_is_scoped_and_not_a_safety_claim(self):
+        self.report['questions'] = []
+        self.report['scenarios'] = [self.report['scenarios'][0]]
+        next(n for n in self.report['nodes'] if n['id'] == 'provider')['owner_ids'] = ['company']
+        next(e for e in self.report['edges'] if e['id'] == 'refund_unknown').update(basis='observed', evidence_ids=['Elive'])
+        self.report['boundaries'][2]['remaining_checks'] = []
+        self.report['coverage'][-1]['status'] = 'inspected'
+        self.assertEqual([], self.errors())
+        self.assertIn('No attack paths found within the reviewed scope.', bm.render(self.report))
+
+    def test_generic_unknown_cannot_be_delivered_in_either_format(self):
+        del self.report['questions'][0]['human_blocker']
+        self.assertTrue(any('Agent work remains' in e for e in self.errors()))
+        for renderer in [bm.render, bm.render_html]:
+            with self.subTest(renderer=renderer.__name__), self.assertRaises(bm.ReportError):
+                renderer(self.report)
+
+    def test_request_cannot_hide_unrelated_missing_ownership(self):
+        next(n for n in self.report['nodes'] if n['id'] == 'customer_key')['owner_ids'] = []
+        self.assertIn('owner:customer_key', '\n'.join(self.errors()))
+        self.assertEqual('unverified', self.result()['status'])
+
+    def test_request_must_cover_every_dependent_gap(self):
+        self.report['questions'][0]['human_blocker']['gap_ids'].remove('edge:refund_unknown')
+        self.assertIn('Agent work remains [edge:refund_unknown]', '\n'.join(self.errors()))
+
+    def test_request_needs_actual_attempts_and_named_human(self):
+        h = self.report['questions'][0]['human_blocker']
+        h['attempted_checks'] = []
+        h['requested_from'] = ''
+        errors = '\n'.join(self.errors())
+        self.assertIn('attempted_checks', errors)
+        self.assertIn('requested_from', errors)
+
+    def test_request_timestamp_requires_timezone(self):
+        self.report['questions'][0]['human_blocker']['asked_at'] = '2026-10-25T12:00:00'
+        self.assertIn('asked_at', '\n'.join(self.errors()))
+
+    def test_agent_review_cannot_be_waived_by_human_request(self):
+        self.report['boundaries'][2]['challenge'] = 'unresolved'
+        q = self.report['questions'][0]
+        q['human_blocker']['gap_ids'].append('challenge:B_refund')
+        self.assertIn('agent work cannot be delegated', '\n'.join(self.errors()))
+
+    def test_answer_returns_work_to_agent_before_delivery(self):
+        self.report['questions'][0].update(status='answered', answer='Owner has supplied the provider export.')
+        self.assertIn('reconcile it before delivery', '\n'.join(self.errors()))
+        self.assertEqual('unverified', self.result(boundary='B_refund')['status'])
+
+    def test_request_must_match_affected_target(self):
+        self.report['questions'][0]['affects'].remove('provider')
+        self.assertIn('request does not affect target of owner:provider', '\n'.join(self.errors()))
+
+    def test_unknown_enforcer_requires_its_missing_fact_not_false_bypass(self):
+        self.report['edges'].append(dict(id='maybe_provider', source='api', target='provider', requires_all=[],
+                                        description='Provider admin grant needs inspection', basis='unknown',
+                                        relation='administer', evidence_ids=[]))
+        q = self.report['questions'][0]
+        q['affects'].append('maybe_provider')
+        q['human_blocker']['gap_ids'].append('edge:maybe_provider')
+        self.assertEqual([], self.errors())
+        self.assertEqual('unverified', self.result(boundary='B_refund')['status'])
+
+    def test_completed_investigation_has_no_pending_outcome(self):
+        self.report['questions'] = []
+        next(n for n in self.report['nodes'] if n['id'] == 'provider')['owner_ids'] = ['company']
+        next(e for e in self.report['edges'] if e['id'] == 'refund_unknown').update(basis='observed', evidence_ids=['Elive'])
+        self.report['boundaries'][2]['remaining_checks'] = []
+        self.report['coverage'][-1]['status'] = 'inspected'
+        self.assertEqual([], self.errors())
+        self.assertEqual('complete', bm.delivery_state(self.report)['status'])
+        self.assertNotIn('unverified', {r['status'] for a in bm.delivery_state(self.report)['assessments'] for r in a['results']})
+
+    def test_defeated_path_does_not_hide_unfinished_investigation(self):
+        self.report['scenarios'] = [dict(self.report['scenarios'][0], initial_control=['payout', 'destination', 'refund'])]
+        del self.report['questions'][0]['human_blocker']
+        self.assertEqual({'defeated'}, {r['status'] for r in bm.assess(self.report, self.report['scenarios'][0])['results']})
+        self.assertIn('Agent work remains', '\n'.join(self.errors()))
+
     def test_deployment_indirectly_exposes_runtime_admin(self):
         self.assertEqual('defeated', self.result('S_employee', 'B_dest')['status'])
         s = next(s for s in self.report['scenarios'] if s['id'] == 'S_employee')
@@ -171,6 +295,19 @@ class CLITests(unittest.TestCase):
             self.assertEqual(0,self.run_cli(*args).returncode)
             self.assertEqual((EXAMPLE/'map.html').read_text(),output.read_text())
             self.assertEqual(2,self.run_cli(*args).returncode)
+
+    def test_cli_will_not_write_a_report_with_agent_work_remaining(self):
+        with tempfile.TemporaryDirectory() as folder:
+            report = bm.read_json(REPORT)
+            del report['questions'][0]['human_blocker']
+            path = Path(folder) / 'report.json'; bm.write_json(path, report)
+            output = Path(folder) / 'map.html'
+            for fmt in ['html', 'md']:
+                result = self.run_cli('render', path, '--repo', f'repo1={EXAMPLE}',
+                                      '--out', output, '--format', fmt)
+                self.assertEqual(1, result.returncode, result.stderr)
+                self.assertIn('Agent work remains', result.stderr)
+                self.assertFalse(output.exists())
 
     def test_answer_is_saved_but_not_verified(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -4,23 +4,61 @@ Fictional Payments — illustrative architecture
 
 Snapshot-based investigation, not a security certification. Unreachable in the graph does not prove impossible in the system.
 
-| Compromise | Action | Outcome | Why |
-| --- | --- | --- | --- |
-| Public internet | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Public internet | Change allowed recipients | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Public internet | Redirect provider refund | unverified | Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Employee deploy account | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Employee deploy account | Change allowed recipients | defeated | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Employee deploy account | Redirect provider refund | unverified | An unresolved authority grant could reach this action. Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Production API and its credentials | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Production API and its credentials | Change allowed recipients | defeated | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Production API and its credentials | Redirect provider refund | unverified | An unresolved authority grant could reach this action. Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Customer signing credential | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Customer signing credential | Change allowed recipients | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Customer signing credential | Redirect provider refund | unverified | Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Independent settlement administrator | Approve external payout | defeated | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Independent settlement administrator | Change allowed recipients | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Independent settlement administrator | Redirect provider refund | unverified | Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
+Investigation: Waiting for specific human input
+
+## Attack paths found
+
+### Employee deploy account → Change allowed recipients
+
+Assumed starting access: Employee deploy account
+
+- Employee deploy account → API runtime control: Deploy arbitrary API code and use runtime credentials. (evidence: Elive)
+- API runtime control → Use destination admin: api grants admin (evidence: Elive)
+- Use destination admin → Change allowed recipients: admin grants destination (evidence: Elive)
+
+One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.
+
+### Production API and its credentials → Change allowed recipients
+
+Assumed starting access: API runtime control
+
+- API runtime control → Use destination admin: api grants admin (evidence: Elive)
+- Use destination admin → Change allowed recipients: admin grants destination (evidence: Elive)
+
+One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.
+
+### Independent settlement administrator → Approve external payout
+
+Assumed starting access: Independent approver
+
+- Independent approver → Control settlement enforcement: approver grants settlement (evidence: Elive)
+- Control settlement enforcement → Approve external payout: Replacement enforcement code bypasses the normal signature restriction. (evidence: Elive)
+
+One observed authority path under this scenario, not a demonstrated exploit or an exhaustive list of alternatives.
+
+## Specific input required
+
+### Q_refund: Connect read-only access to the production provider account, or export its effective refund-recipient permissions and administrator recovery settings. Do not supply secret values.
+
+Requested from: The fictional payments provider account owner
+
+Why the agent cannot obtain it: The available provider connector can read transactions but cannot inspect permission or recovery settings. Only the account owner can authorize this access or export.
+
+Already checked: Inspected the supplied repository and deployment snapshot; neither contains the installed provider policy.; Inspected the fictional connected provider tool inventory: transaction-read scope only; no permissions or recovery endpoint is authorized.
+
+Resolves: question:Q_refund, owner:provider, edge:refund_unknown, coverage:C_external_provider, check-1:B_refund
+
+## Supporting evidence for ruled-out paths
+
+| Compromise | Action investigated | Why this path was ruled out |
+| --- | --- | --- |
+| Public internet | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Public internet | Change allowed recipients | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Employee deploy account | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Production API and its credentials | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Customer signing credential | Approve external payout | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Customer signing credential | Change allowed recipients | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Independent settlement administrator | Change allowed recipients | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
 
 ## System coverage
 
@@ -123,12 +161,31 @@ Snapshot-based investigation, not a security certification. Unreachable in the g
     "affects": [
       "provider",
       "B_refund",
-      "C_external_provider"
+      "C_external_provider",
+      "refund_unknown"
     ],
     "needed_evidence": "Provider effective permissions, destination restrictions and recovery metadata.",
     "answer": "",
     "status": "open",
-    "evidence_ids": []
+    "evidence_ids": [],
+    "human_blocker": {
+      "kind": "access",
+      "requested_from": "The fictional payments provider account owner",
+      "request": "Connect read-only access to the production provider account, or export its effective refund-recipient permissions and administrator recovery settings. Do not supply secret values.",
+      "why_agent_cannot_resolve": "The available provider connector can read transactions but cannot inspect permission or recovery settings. Only the account owner can authorize this access or export.",
+      "attempted_checks": [
+        "Inspected the supplied repository and deployment snapshot; neither contains the installed provider policy.",
+        "Inspected the fictional connected provider tool inventory: transaction-read scope only; no permissions or recovery endpoint is authorized."
+      ],
+      "asked_at": "2026-10-25T12:00:00Z",
+      "gap_ids": [
+        "question:Q_refund",
+        "owner:provider",
+        "edge:refund_unknown",
+        "coverage:C_external_provider",
+        "check-1:B_refund"
+      ]
+    }
   }
 ]
 ```

@@ -373,8 +373,8 @@
         "C_recovery",
         "C_external_provider"
       ],
-      "challenge": "unresolved",
-      "challenge_notes": "Reviewed deployment, administration, recovery and alternative paths in this fictional model.",
+      "challenge": "supported",
+      "challenge_notes": "Challenged all available source and deployment evidence. Missing provider permissions remain explicit; no supported enforcement conclusion is possible until Q_refund is answered and corroborated.",
       "remaining_checks": [
         "Inspect provider destination policy and administrator recovery."
       ],
@@ -548,12 +548,31 @@
       "affects": [
         "provider",
         "B_refund",
-        "C_external_provider"
+        "C_external_provider",
+        "refund_unknown"
       ],
       "needed_evidence": "Provider effective permissions, destination restrictions and recovery metadata.",
       "answer": "",
       "status": "open",
-      "evidence_ids": []
+      "evidence_ids": [],
+      "human_blocker": {
+        "kind": "access",
+        "requested_from": "The fictional payments provider account owner",
+        "request": "Connect read-only access to the production provider account, or export its effective refund-recipient permissions and administrator recovery settings. Do not supply secret values.",
+        "why_agent_cannot_resolve": "The available provider connector can read transactions but cannot inspect permission or recovery settings. Only the account owner can authorize this access or export.",
+        "attempted_checks": [
+          "Inspected the supplied repository and deployment snapshot; neither contains the installed provider policy.",
+          "Inspected the fictional connected provider tool inventory: transaction-read scope only; no permissions or recovery endpoint is authorized."
+        ],
+        "asked_at": "2026-10-25T12:00:00Z",
+        "gap_ids": [
+          "question:Q_refund",
+          "owner:provider",
+          "edge:refund_unknown",
+          "coverage:C_external_provider",
+          "check-1:B_refund"
+        ]
+      }
     }
   ]
 }

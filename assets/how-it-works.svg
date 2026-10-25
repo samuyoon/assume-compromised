@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="1720" viewBox="0 0 1400 1720"><rect width="100%" height="100%" fill="#FAFAF7"/>
+<text x="190" y="103.71000000000001" font-family="Arial,sans-serif" font-size="47" font-weight="700" fill="#172624">How Security Boundary Mapping works</text>
+<text x="190" y="151.97" font-family="Arial,sans-serif" font-size="29" font-weight="400" fill="#5B6D66">Investigate your system with your coding agent.</text>
+<rect x="190" y="220" width="1120" height="155" rx="18" fill="white" stroke="#C6D2CB" stroke-width="2"/>
+<circle cx="240.5" cy="268.5" r="24.5" fill="#19705A"/>
+<text x="232" y="277.9" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">1</text>
+<text x="287" y="279.55" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#172624">Discover your system</text>
+<text x="287" y="324.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">Read your code and deployment settings. Identify services, credentials, and</text>
+<text x="287" y="361.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">permissions.</text>
+<polyline points="750,375 750,414" fill="none" stroke="#19705A" stroke-width="3"/>
+<polygon points="750,414 740,398 760,398" fill="#19705A"/>
+<rect x="190" y="424" width="1120" height="155" rx="18" fill="white" stroke="#C6D2CB" stroke-width="2"/>
+<circle cx="240.5" cy="472.5" r="24.5" fill="#19705A"/>
+<text x="232" y="481.9" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">2</text>
+<text x="287" y="483.55" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#172624">Trace who can do what</text>
+<text x="287" y="528.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">Follow access between people and services, including who can change the</text>
+<text x="287" y="565.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">rules.</text>
+<polyline points="750,579 750,618" fill="none" stroke="#19705A" stroke-width="3"/>
+<polygon points="750,618 740,602 760,602" fill="#19705A"/>
+<rect x="190" y="628" width="1120" height="155" rx="18" fill="white" stroke="#C6D2CB" stroke-width="2"/>
+<circle cx="240.5" cy="676.5" r="24.5" fill="#19705A"/>
+<text x="232" y="685.9" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">3</text>
+<text x="287" y="687.55" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#172624">Ask for human-only input</text>
+<text x="287" y="732.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">Investigate first. Ask for the exact missing fact or access only a human can</text>
+<text x="287" y="769.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">provide.</text>
+<polyline points="750,783 750,822" fill="none" stroke="#19705A" stroke-width="3"/>
+<polygon points="750,822 740,806 760,806" fill="#19705A"/>
+<rect x="190" y="832" width="1120" height="155" rx="18" fill="white" stroke="#C6D2CB" stroke-width="2"/>
+<circle cx="240.5" cy="880.5" r="24.5" fill="#19705A"/>
+<text x="232" y="889.9" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">4</text>
+<text x="287" y="891.55" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#172624">Challenge and verify</text>
+<text x="287" y="936.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">Resolve every gap you can investigate. Check the evidence and look for</text>
+<text x="287" y="973.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">overlooked paths.</text>
+<polyline points="750,987 750,1026" fill="none" stroke="#19705A" stroke-width="3"/>
+<polygon points="750,1026 740,1010 760,1010" fill="#19705A"/>
+<polyline points="190,910 91,910 91,501 190,501" fill="none" stroke="#8B9A92" stroke-width="3"/>
+<polygon points="190,501 174,491 174,511" fill="#8B9A92"/>
+<rect x="20" y="643" width="145" height="112" rx="0" fill="#FAFAF7" stroke="#FAFAF7" stroke-width="2"/>
+<text x="34" y="678.25" font-family="Arial,sans-serif" font-size="25" font-weight="700" fill="#5B6D66">Resolve</text>
+<text x="34" y="711.25" font-family="Arial,sans-serif" font-size="25" font-weight="400" fill="#5B6D66">gaps and</text>
+<text x="34" y="743.25" font-family="Arial,sans-serif" font-size="25" font-weight="400" fill="#5B6D66">recheck</text>
+<rect x="190" y="1036" width="1120" height="620" rx="18" fill="#F0F4F0" stroke="#89AF9D" stroke-width="2"/>
+<circle cx="240.5" cy="1086.5" r="24.5" fill="#19705A"/>
+<text x="232" y="1095.9" font-family="Arial,sans-serif" font-size="30" font-weight="700" fill="white">5</text>
+<text x="287" y="1097.55" font-family="Arial,sans-serif" font-size="35" font-weight="700" fill="#172624">See the attack paths</text>
+<text x="226" y="1160.97" font-family="Arial,sans-serif" font-size="29" font-weight="400" fill="#5B6D66">Select the account or server you assume is compromised.</text>
+<rect x="226" y="1210" width="1048" height="130" rx="12" fill="white" stroke="#D4E1D8" stroke-width="2"/>
+<text x="254" y="1253.83" font-family="Arial,sans-serif" font-size="31" font-weight="700" fill="#8A442D">Attack paths found</text>
+<text x="254" y="1298.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">Starting access → permissions gained → money, data, or systems reached.</text>
+<rect x="226" y="1370" width="1048" height="130" rx="12" fill="white" stroke="#D4E1D8" stroke-width="2"/>
+<text x="254" y="1413.83" font-family="Arial,sans-serif" font-size="31" font-weight="700" fill="#87631E">Specific input required</text>
+<text x="254" y="1458.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">The exact fact or access only a human can supply to verify a suspected path.</text>
+<text x="226" y="1571.11" font-family="Arial,sans-serif" font-size="27" font-weight="400" fill="#5B6D66">If the completed review finds none:</text>
+<text x="226" y="1616.97" font-family="Arial,sans-serif" font-size="29" font-weight="700" fill="#172624">“No attack paths found within the reviewed scope.”</text>
+</svg>

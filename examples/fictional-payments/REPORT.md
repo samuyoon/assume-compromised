@@ -4,23 +4,38 @@ Fictional Payments — illustrative architecture
 
 Snapshot-based investigation, not a security certification. Unreachable in the graph does not prove impossible in the system.
 
+Investigation: Waiting for specific human input
+
 | Compromise | Action | Outcome | Why |
 | --- | --- | --- | --- |
-| Public internet | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Public internet | Change allowed recipients | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Public internet | Redirect provider refund | unverified | Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Employee deploy account | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Employee deploy account | Change allowed recipients | defeated | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Employee deploy account | Redirect provider refund | unverified | An unresolved authority grant could reach this action. Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Production API and its credentials | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Production API and its credentials | Change allowed recipients | defeated | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Production API and its credentials | Redirect provider refund | unverified | An unresolved authority grant could reach this action. Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Customer signing credential | Approve external payout | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Customer signing credential | Change allowed recipients | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Customer signing credential | Redirect provider refund | unverified | Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
-| Independent settlement administrator | Approve external payout | defeated | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
-| Independent settlement administrator | Change allowed recipients | survives | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
-| Independent settlement administrator | Redirect provider refund | unverified | Unresolved clarifications: Q_refund Incomplete coverage: C_external_provider Unresolved credential/control owners: provider Challenge or deployment checks remain incomplete. Action paths are not all deployment-observed. |
+| Public internet | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Public internet | Change allowed recipients | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Public internet | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
+| Employee deploy account | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Employee deploy account | Change allowed recipients | Attacker can reach | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
+| Employee deploy account | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
+| Production API and its credentials | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Production API and its credentials | Change allowed recipients | Attacker can reach | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
+| Production API and its credentials | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
+| Customer signing credential | Approve external payout | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Customer signing credential | Change allowed recipients | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Customer signing credential | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
+| Independent settlement administrator | Approve external payout | Attacker can reach | A modeled authority path reaches this action. Follow the graph edges for the prerequisites. |
+| Independent settlement administrator | Change allowed recipients | Still protected | The reviewed model requires authority outside this compromise. Limited to this snapshot and declared coverage. |
+| Independent settlement administrator | Redirect provider refund | Waiting for your input | refund_unknown: inspect the effective deployed grant (Provider may permit destination changes; missing provider policy evidence.). Q_refund: reconcile the clarification and its evidence. C_external_provider: complete the external provider inspection. provider: establish who controls and recovers this authority. Inspect provider destination policy and administrator recovery. |
+
+## Exact input needed to finish
+
+### Q_refund: Connect read-only access to the production provider account, or export its effective refund-recipient permissions and administrator recovery settings. Do not supply secret values.
+
+Requested from: The fictional payments provider account owner
+
+Why the agent cannot obtain it: The available provider connector can read transactions but cannot inspect permission or recovery settings. Only the account owner can authorize this access or export.
+
+Already checked: Inspected the supplied repository and deployment snapshot; neither contains the installed provider policy.; Inspected the fictional connected provider tool inventory: transaction-read scope only; no permissions or recovery endpoint is authorized.
+
+Resolves: question:Q_refund, owner:provider, edge:refund_unknown, coverage:C_external_provider, check-1:B_refund
+
 
 ## System coverage
 
@@ -123,12 +138,31 @@ Snapshot-based investigation, not a security certification. Unreachable in the g
     "affects": [
       "provider",
       "B_refund",
-      "C_external_provider"
+      "C_external_provider",
+      "refund_unknown"
     ],
     "needed_evidence": "Provider effective permissions, destination restrictions and recovery metadata.",
     "answer": "",
     "status": "open",
-    "evidence_ids": []
+    "evidence_ids": [],
+    "human_blocker": {
+      "kind": "access",
+      "requested_from": "The fictional payments provider account owner",
+      "request": "Connect read-only access to the production provider account, or export its effective refund-recipient permissions and administrator recovery settings. Do not supply secret values.",
+      "why_agent_cannot_resolve": "The available provider connector can read transactions but cannot inspect permission or recovery settings. Only the account owner can authorize this access or export.",
+      "attempted_checks": [
+        "Inspected the supplied repository and deployment snapshot; neither contains the installed provider policy.",
+        "Inspected the fictional connected provider tool inventory: transaction-read scope only; no permissions or recovery endpoint is authorized."
+      ],
+      "asked_at": "2026-10-25T12:00:00Z",
+      "gap_ids": [
+        "question:Q_refund",
+        "owner:provider",
+        "edge:refund_unknown",
+        "coverage:C_external_provider",
+        "check-1:B_refund"
+      ]
+    }
   }
 ]
 ```

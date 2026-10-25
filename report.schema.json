@@ -452,6 +452,9 @@
             "minLength": 1
           },
           "minItems": 0
+        },
+        "human_blocker": {
+          "$ref": "#/$defs/human_blocker"
         }
       },
       "required": [
@@ -518,6 +521,60 @@
         "kind",
         "captured_at",
         "provenance"
+      ],
+      "additionalProperties": false
+    },
+    "human_blocker": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "information",
+            "access"
+          ]
+        },
+        "requested_from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "request": {
+          "type": "string",
+          "minLength": 1
+        },
+        "why_agent_cannot_resolve": {
+          "type": "string",
+          "minLength": 1
+        },
+        "attempted_checks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "asked_at": {
+          "type": "string",
+          "minLength": 1
+        },
+        "gap_ids": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "required": [
+        "kind",
+        "requested_from",
+        "request",
+        "why_agent_cannot_resolve",
+        "attempted_checks",
+        "asked_at",
+        "gap_ids"
       ],
       "additionalProperties": false
     }
